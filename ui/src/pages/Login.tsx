@@ -6,24 +6,7 @@ type LoginResponse = {
   refresh_token?: string
   token_type: string
   expires_in: number
-}
-
-function resolveClientId(): string | null {
-  const params = new URLSearchParams(window.location.search)
-  const direct = params.get('client_id')
-  if (direct) {
-    return direct
-  }
-  const returnTo = params.get('return_to')
-  if (!returnTo) {
-    return null
-  }
-  try {
-    const url = new URL(returnTo, window.location.origin)
-    return url.searchParams.get('client_id')
-  } catch {
-    return null
-  }
+  authorize_url?: string
 }
 
 function resolveReturnTo(): string {
@@ -31,9 +14,14 @@ function resolveReturnTo(): string {
   return params.get('return_to') || '/'
 }
 
+function resolveAuthorizeState(): string | null {
+  const params = new URLSearchParams(window.location.search)
+  return params.get('state')
+}
+
 export default function Login() {
-  const clientId = useMemo(() => resolveClientId(), [])
   const returnTo = useMemo(() => resolveReturnTo(), [])
+  const authorizeState = useMemo(() => resolveAuthorizeState(), [])
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -44,20 +32,24 @@ export default function Login() {
     event.preventDefault()
     setError(null)
 
-    if (!clientId) {
-      setError('Missing client_id. Please retry from the OAuth authorize flow.')
+    if (!authorizeState) {
+      setError('Missing state. Please retry from the OAuth authorize flow.')
       return
     }
 
     setSubmitting(true)
     try {
       // UI never stores tokens; the backend sets HttpOnly session cookies.
-      await postJSON<LoginResponse>('/auth/password/login', {
+      const payload = await postJSON<LoginResponse>('/auth/password/login', {
         email,
         password,
-        client_id: clientId,
         scope: 'openid email profile',
+        state: authorizeState,
       })
+      if (payload.authorize_url) {
+        window.location.href = payload.authorize_url
+        return
+      }
       window.location.href = returnTo
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed.')

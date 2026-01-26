@@ -249,7 +249,11 @@ func (r *PostgresTokenRepo) CreateToken(ctx context.Context, token domain.OAuthT
 	if token.RefreshToken != "" {
 		refresh = sql.NullString{String: token.RefreshToken, Valid: true}
 	}
-	row, err := r.q.InsertOAuthToken(ctx, token.ID, token.OrgID, token.ClientID, token.UserID, token.AccessToken, refresh, token.Scopes, token.ExpiresAt)
+	userID := sql.NullInt64{}
+	if token.UserID != 0 {
+		userID = sql.NullInt64{Int64: token.UserID, Valid: true}
+	}
+	row, err := r.q.InsertOAuthToken(ctx, token.ID, token.OrgID, token.ClientID, userID, token.AccessToken, refresh, token.Scopes, token.ExpiresAt)
 	if err != nil {
 		return domain.OAuthToken{}, fmt.Errorf("insert token: %w", err)
 	}
@@ -551,11 +555,15 @@ func mapKeyRow(row sqlc.GetActiveOAuthKeyRow) domain.OAuthKey {
 
 func mapTokenRow(row sqlc.InsertOAuthTokenRow) domain.OAuthToken {
 	scopes := row.Scopes
+	userID := int64(0)
+	if row.UserID.Valid {
+		userID = row.UserID.Int64
+	}
 	return domain.OAuthToken{
 		ID:           row.ID,
 		OrgID:        row.TenantID,
 		ClientID:     row.ClientID,
-		UserID:       row.UserID,
+		UserID:       userID,
 		AccessToken:  row.AccessToken,
 		RefreshToken: row.RefreshToken.String,
 		Scopes:       scopes,

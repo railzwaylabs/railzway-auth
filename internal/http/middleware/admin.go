@@ -1,43 +1,76 @@
 package middleware
 
 import (
-	"crypto/subtle"
+	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/smallbiznis/railzway-auth/internal/config"
+	"github.com/smallbiznis/railzway-auth/internal/service"
 )
 
 // Admin protects internal admin routes with a shared token.
 type Admin struct {
-	cfg config.Config
+	auth *service.AuthService
 }
 
-func NewAdmin(cfg config.Config) *Admin {
-	return &Admin{cfg: cfg}
+func NewAdmin(auth *service.AuthService) *Admin {
+	return &Admin{auth: auth}
 }
 
 // Require validates the admin token header.
 func (m *Admin) Require(c *gin.Context) {
-	expected := strings.TrimSpace(m.cfg.AdminAPIToken)
-	if expected == "" {
-		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "admin_token_not_configured"})
+	if bearer := readBearerToken(c); bearer != "" {
+		if m.auth == nil {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid_token"})
+			return
+		}
+		orgCtx, ok := GetOrgContext(c)
+		if !ok || orgCtx == nil {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid_tenant"})
+			return
+		}
+		issuer := fmt.Sprintf("%s://%s", schemeOnly(c.Request), hostOnly(c.Request))
+		_, claims, err := m.auth.ValidateToken(c.Request.Context(), orgCtx.Org.ID, bearer, issuer)
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid_token"})
+			return
+		}
+		if !hasAdminScope(claims.Scope) {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "insufficient_scope"})
+			return
+		}
+		c.Next()
 		return
 	}
 
-	token := strings.TrimSpace(c.GetHeader("X-Admin-Token"))
-	if token == "" {
-		authHeader := strings.TrimSpace(c.GetHeader("Authorization"))
-		if strings.HasPrefix(strings.ToLower(authHeader), "bearer ") {
-			token = strings.TrimSpace(authHeader[7:])
+	c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid_token"})
+}
+
+func readBearerToken(c *gin.Context) string {
+	if c == nil || c.Request == nil {
+		return ""
+	}
+	header := strings.TrimSpace(c.GetHeader("Authorization"))
+	if header == "" {
+		return ""
+	}
+	parts := strings.SplitN(header, " ", 2)
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+		return ""
+	}
+	return strings.TrimSpace(parts[1])
+}
+
+func hasAdminScope(scope string) bool {
+	if strings.TrimSpace(scope) == "" {
+		return false
+	}
+	for _, value := range strings.Fields(scope) {
+		switch strings.ToLower(strings.TrimSpace(value)) {
+		case "admin", "admin:*", "admin:oauth_clients":
+			return true
 		}
 	}
-
-	if token == "" || subtle.ConstantTimeCompare([]byte(token), []byte(expected)) != 1 {
-		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
-	}
-
-	c.Next()
+	return false
 }

@@ -1,12 +1,16 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 
+	domainoauth "github.com/smallbiznis/railzway-auth/internal/domain/oauth"
 	"github.com/smallbiznis/railzway-auth/internal/http/middleware"
 	"github.com/smallbiznis/railzway-auth/internal/service"
 )
@@ -23,6 +27,8 @@ func (h *AuthHandler) PasswordLogin(c *gin.Context) {
 		Password string `json:"password"`
 		ClientID string `json:"client_id"`
 		Scope    string `json:"scope"`
+		// Optional: when provided, continue OAuth authorize flow using stored state.
+		State string `json:"state"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "Invalid payload."})
@@ -33,7 +39,21 @@ func (h *AuthHandler) PasswordLogin(c *gin.Context) {
 		return
 	}
 
+	authorizeStateID := strings.TrimSpace(req.State)
+	authorizeState, err := h.loadAuthorizeState(c, authorizeStateID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": err.Error()})
+		return
+	}
+
 	clientID := strings.TrimSpace(req.ClientID)
+	if authorizeState != nil {
+		if clientID != "" && clientID != authorizeState.ClientID {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "client_id does not match authorize state."})
+			return
+		}
+		clientID = authorizeState.ClientID
+	}
 	if clientID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "unauthorized_client", "error_description": "Unknown client_id for org."})
 		return
@@ -41,17 +61,24 @@ func (h *AuthHandler) PasswordLogin(c *gin.Context) {
 
 	scope := strings.TrimSpace(req.Scope)
 
-	resp, err := h.Auth.LoginWithPassword(c.Request.Context(), orgCtx.Org.ID, req.Email, req.Password, clientID, scope)
+	issuer := fmt.Sprintf("%s://%s", schemeOnly(c.Request), hostOnly(c.Request))
+	resp, err := h.Auth.LoginWithPassword(c.Request.Context(), orgCtx.Org.ID, req.Email, req.Password, clientID, scope, issuer)
 	if err != nil {
 		respondOAuthError(c, err)
 		return
 	}
 
 	maxAge := 3600
-	setCookie(c, "sb_access_token", resp.AccessToken, maxAge, "/", ".smallbiznisapp.io", false, true)
-	setCookie(c, "sb_refresh_token", resp.RefreshToken, maxAge, "/", ".smallbiznisapp.io", false, true)
+	setCookie(c, "sb_access_token", resp.AccessToken, maxAge, "/", ".railzway.test", false, true)
+	setCookie(c, "sb_refresh_token", resp.RefreshToken, maxAge, "/", ".railzway.test", false, true)
 
-	c.JSON(http.StatusOK, resp)
+	authorizeURL := ""
+	if authorizeState != nil {
+		authorizeURL = buildAuthorizeURLFromState(authorizeState)
+		h.deleteAuthorizeState(c, authorizeStateID)
+	}
+
+	c.JSON(http.StatusOK, authResponse{AuthTokensWithUser: resp, AuthorizeURL: authorizeURL})
 }
 
 func (h *AuthHandler) PasswordRegister(c *gin.Context) {
@@ -66,6 +93,8 @@ func (h *AuthHandler) PasswordRegister(c *gin.Context) {
 		Password string `json:"password"`
 		Name     string `json:"name"`
 		ClientID string `json:"client_id"`
+		// Optional: when provided, continue OAuth authorize flow using stored state.
+		State string `json:"state"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "Invalid payload."})
@@ -76,13 +105,28 @@ func (h *AuthHandler) PasswordRegister(c *gin.Context) {
 		return
 	}
 
+	authorizeStateID := strings.TrimSpace(req.State)
+	authorizeState, err := h.loadAuthorizeState(c, authorizeStateID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": err.Error()})
+		return
+	}
+
 	clientID := strings.TrimSpace(req.ClientID)
+	if authorizeState != nil {
+		if clientID != "" && clientID != authorizeState.ClientID {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "client_id does not match authorize state."})
+			return
+		}
+		clientID = authorizeState.ClientID
+	}
 	if clientID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "unauthorized_client", "error_description": "Unknown client_id for org."})
 		return
 	}
 
-	resp, err := h.Auth.RegisterWithPassword(c.Request.Context(), orgCtx.Org.ID, req.Email, req.Password, req.Name, clientID)
+	issuer := fmt.Sprintf("%s://%s", schemeOnly(c.Request), hostOnly(c.Request))
+	resp, err := h.Auth.RegisterWithPassword(c.Request.Context(), orgCtx.Org.ID, req.Email, req.Password, req.Name, clientID, issuer)
 	if err != nil {
 		respondOAuthError(c, err)
 		return
@@ -92,8 +136,13 @@ func (h *AuthHandler) PasswordRegister(c *gin.Context) {
 	setCookie(c, "sb_access_token", resp.AccessToken, maxAge, "/", ".smallbiznisapp.io", false, true)
 	setCookie(c, "sb_refresh_token", resp.RefreshToken, maxAge, "/", ".smallbiznisapp.io", false, true)
 
+	authorizeURL := ""
+	if authorizeState != nil {
+		authorizeURL = buildAuthorizeURLFromState(authorizeState)
+		h.deleteAuthorizeState(c, authorizeStateID)
+	}
 
-	c.JSON(http.StatusOK, resp)
+	c.JSON(http.StatusOK, authResponse{AuthTokensWithUser: resp, AuthorizeURL: authorizeURL})
 }
 
 func (h *AuthHandler) PasswordForgot(c *gin.Context) {
@@ -180,7 +229,8 @@ func (h *AuthHandler) OTPVerify(c *gin.Context) {
 	}
 	scope := strings.TrimSpace(req.Scope)
 
-	resp, err := h.Auth.VerifyOTP(c.Request.Context(), orgCtx.Org.ID, req.Phone, req.Code, clientID, scope)
+	issuer := fmt.Sprintf("%s://%s", schemeOnly(c.Request), hostOnly(c.Request))
+	resp, err := h.Auth.VerifyOTP(c.Request.Context(), orgCtx.Org.ID, req.Phone, req.Code, clientID, scope, issuer)
 	if err != nil {
 		respondOAuthError(c, err)
 		return
@@ -226,12 +276,82 @@ func respondOAuthError(c *gin.Context, err error) {
 
 func setCookie(c *gin.Context, name, value string, maxAge int, path, domain string, secure, httpOnly bool) {
 	c.SetCookie(
-		name,   // name
-		value,         // value
-		maxAge,                // maxAge (1 jam)
-		path,                 // path
-		domain, // domain → penting!!
-		secure,                // secure → harus true kalau HTTPS
-		httpOnly,                // httpOnly → jangan bisa diakses JS
+		name,     // name
+		value,    // value
+		maxAge,   // maxAge (1 jam)
+		path,     // path
+		domain,   // domain → penting!!
+		secure,   // secure → harus true kalau HTTPS
+		httpOnly, // httpOnly → jangan bisa diakses JS
 	)
+}
+
+type authResponse struct {
+	service.AuthTokensWithUser
+	AuthorizeURL string `json:"authorize_url,omitempty"`
+}
+
+func (h *AuthHandler) loadAuthorizeState(c *gin.Context, stateID string) (*domainoauth.AuthorizeState, error) {
+	if strings.TrimSpace(stateID) == "" {
+		return nil, nil
+	}
+	if h.AuthorizeStateStore == nil {
+		return nil, fmt.Errorf("authorize state store not configured")
+	}
+	state, err := h.AuthorizeStateStore.GetState(c.Request.Context(), buildAuthorizeStateKey(stateID))
+	if err != nil {
+		return nil, fmt.Errorf("load authorize state: %w", err)
+	}
+	if state == nil {
+		return nil, fmt.Errorf("authorize state not found")
+	}
+	orgCtx, ok := middleware.GetOrgContext(c)
+	if !ok {
+		return nil, fmt.Errorf("org not resolved")
+	}
+	if state.OrgID != orgCtx.Org.ID {
+		return nil, fmt.Errorf("authorize state org mismatch")
+	}
+	return state, nil
+}
+
+func (h *AuthHandler) deleteAuthorizeState(c *gin.Context, stateID string) {
+	if strings.TrimSpace(stateID) == "" || h.AuthorizeStateStore == nil {
+		return
+	}
+	if err := h.AuthorizeStateStore.DeleteState(c.Request.Context(), buildAuthorizeStateKey(stateID)); err != nil {
+		zap.L().Warn("failed to delete authorize state", zap.Error(err))
+	}
+}
+
+func buildAuthorizeURLFromState(state *domainoauth.AuthorizeState) string {
+	if state == nil {
+		return ""
+	}
+	authorizeURL := &url.URL{Path: "/oauth/authorize"}
+	q := authorizeURL.Query()
+	q.Set("client_id", state.ClientID)
+	responseType := strings.TrimSpace(state.ResponseType)
+	if responseType == "" {
+		responseType = "code"
+	}
+	q.Set("response_type", responseType)
+	q.Set("redirect_uri", state.RedirectURI)
+	if strings.TrimSpace(state.Scope) != "" {
+		q.Set("scope", strings.TrimSpace(state.Scope))
+	}
+	if strings.TrimSpace(state.State) != "" {
+		q.Set("state", strings.TrimSpace(state.State))
+	}
+	if strings.TrimSpace(state.Nonce) != "" {
+		q.Set("nonce", strings.TrimSpace(state.Nonce))
+	}
+	if strings.TrimSpace(state.CodeChallenge) != "" {
+		q.Set("code_challenge", strings.TrimSpace(state.CodeChallenge))
+	}
+	if strings.TrimSpace(state.CodeChallengeMethod) != "" {
+		q.Set("code_challenge_method", strings.TrimSpace(state.CodeChallengeMethod))
+	}
+	authorizeURL.RawQuery = q.Encode()
+	return authorizeURL.String()
 }

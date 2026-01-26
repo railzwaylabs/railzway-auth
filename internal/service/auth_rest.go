@@ -19,7 +19,7 @@ import (
 const defaultRESTScope = "openid profile email offline_access"
 
 // LoginWithPassword performs username/password login and returns REST-friendly payload.
-func (s *AuthService) LoginWithPassword(ctx context.Context, orgID int64, email, password, clientID, scope string) (AuthTokensWithUser, error) {
+func (s *AuthService) LoginWithPassword(ctx context.Context, orgID int64, email, password, clientID, scope, issuer string) (AuthTokensWithUser, error) {
 	ctx, span := s.startSpan(ctx, "AuthService.LoginWithPassword")
 	defer span.End()
 
@@ -30,9 +30,12 @@ func (s *AuthService) LoginWithPassword(ctx context.Context, orgID int64, email,
 	}
 
 	effectiveScope := coalesce(scope, defaultRESTScope)
-	issuer := orgIssuer(orgCtx)
+	effectiveIssuer := strings.TrimSpace(issuer)
+	if effectiveIssuer == "" {
+		effectiveIssuer = orgIssuer(orgCtx)
+	}
 
-	tokenResp, err := s.PasswordGrant(ctx, orgCtx, email, password, effectiveScope, issuer)
+	tokenResp, err := s.PasswordGrant(ctx, orgCtx, email, password, effectiveScope, effectiveIssuer)
 	if err != nil {
 		span.RecordError(err)
 		return AuthTokensWithUser{}, err
@@ -48,7 +51,7 @@ func (s *AuthService) LoginWithPassword(ctx context.Context, orgID int64, email,
 	return newAuthTokensWithUser(user, tokenResp), nil
 }
 
-func (s *AuthService) RegisterWithPassword(ctx context.Context, orgID int64, email, password, name, clientId string) (AuthTokensWithUser, error) {
+func (s *AuthService) RegisterWithPassword(ctx context.Context, orgID int64, email, password, name, clientId, issuer string) (AuthTokensWithUser, error) {
 	ctx, span := s.startSpan(ctx, "AuthService.RegisterWithPassword")
 	defer span.End()
 
@@ -105,7 +108,12 @@ func (s *AuthService) RegisterWithPassword(ctx context.Context, orgID int64, ema
 		}
 	}
 
-	tokenResp, err := s.issueTokens(ctx, orgCtx, created, defaultRESTScope, orgIssuer(orgCtx), providers)
+	effectiveIssuer := strings.TrimSpace(issuer)
+	if effectiveIssuer == "" {
+		effectiveIssuer = orgIssuer(orgCtx)
+	}
+
+	tokenResp, err := s.issueTokens(ctx, orgCtx, created, defaultRESTScope, effectiveIssuer, providers)
 	if err != nil {
 		span.RecordError(err)
 		return AuthTokensWithUser{}, err
@@ -172,7 +180,7 @@ func (s *AuthService) RequestOTP(ctx context.Context, orgID int64, phone, channe
 }
 
 // VerifyOTP validates OTP and issues OAuth tokens.
-func (s *AuthService) VerifyOTP(ctx context.Context, orgID int64, phone, code, clientID, scope string) (AuthTokensWithUser, error) {
+func (s *AuthService) VerifyOTP(ctx context.Context, orgID int64, phone, code, clientID, scope, issuer string) (AuthTokensWithUser, error) {
 	ctx, span := s.startSpan(ctx, "AuthService.VerifyOTP")
 	defer span.End()
 
@@ -183,9 +191,12 @@ func (s *AuthService) VerifyOTP(ctx context.Context, orgID int64, phone, code, c
 	}
 
 	effectiveScope := coalesce(scope, defaultRESTScope)
-	issuer := orgIssuer(orgCtx)
+	effectiveIssuer := strings.TrimSpace(issuer)
+	if effectiveIssuer == "" {
+		effectiveIssuer = orgIssuer(orgCtx)
+	}
 
-	tokenResp, err := s.OTPGrant(ctx, orgCtx, phone, code, effectiveScope, issuer)
+	tokenResp, err := s.OTPGrant(ctx, orgCtx, phone, code, effectiveScope, effectiveIssuer)
 	if err != nil {
 		span.RecordError(err)
 		return AuthTokensWithUser{}, err

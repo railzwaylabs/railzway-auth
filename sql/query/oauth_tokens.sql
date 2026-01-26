@@ -2,7 +2,7 @@
 INSERT INTO oauth_tokens (
     id, tenant_id, client_id, user_id, access_token, refresh_token, scopes, expires_at
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8
+    $1, $2, $3, sqlc.narg('user_id'), $5, $6, $7, $8
 ) RETURNING id, tenant_id, client_id, user_id, access_token, refresh_token, scopes, expires_at, revoked, created_at;
 
 -- name: GetOAuthTokenByRefresh :one

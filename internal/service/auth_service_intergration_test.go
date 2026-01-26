@@ -160,6 +160,7 @@ func TestAuthService_LoginWithPassword_Integration(t *testing.T) {
 		"secret123",
 		"console-web",
 		"openid profile email",
+		"http://tenant.test",
 	)
 
 	assert.NoError(t, err)
