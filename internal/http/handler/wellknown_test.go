@@ -28,7 +28,7 @@ func TestJWKSHandler(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	orgCtx := testOrgCtx()
 	authSvc := newTestAuthService()
-	handler := httpHandler.NewAuthHandler(authSvc, nil, &service.DiscoveryService{})
+	handler := httpHandler.NewAuthHandler(authSvc, nil, &service.DiscoveryService{}, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "https://tenant.smallbiznis/.well-known/jwks.json", nil)
 	w := httptest.NewRecorder()
@@ -51,7 +51,7 @@ func TestJWKSHandler(t *testing.T) {
 func TestOpenIDConfigurationResponse(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	orgCtx := testOrgCtx()
-	handler := httpHandler.NewAuthHandler(newTestAuthService(), nil, &service.DiscoveryService{})
+	handler := httpHandler.NewAuthHandler(newTestAuthService(), nil, &service.DiscoveryService{}, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "https://tenant.smallbiznis/.well-known/openid-configuration", nil)
 	w := httptest.NewRecorder()

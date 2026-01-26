@@ -25,6 +25,13 @@ type OAuthStateStore interface {
 	DeleteState(ctx context.Context, key string) error
 }
 
+// AuthorizeStateStore persists short-lived OAuth authorize request state.
+type AuthorizeStateStore interface {
+	SaveState(ctx context.Context, key string, data oauth.AuthorizeState, ttl time.Duration) error
+	GetState(ctx context.Context, key string) (*oauth.AuthorizeState, error)
+	DeleteState(ctx context.Context, key string) error
+}
+
 // PostgresOAuthProviderConfigRepo implements OAuthProviderConfigRepo.
 type PostgresOAuthProviderConfigRepo struct {
 	q *sqlc.Queries

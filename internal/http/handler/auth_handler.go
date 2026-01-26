@@ -2,6 +2,8 @@ package handler
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net"
@@ -17,20 +19,32 @@ import (
 	domainoauth "github.com/smallbiznis/railzway-auth/internal/domain/oauth"
 	"github.com/smallbiznis/railzway-auth/internal/http/middleware"
 	"github.com/smallbiznis/railzway-auth/internal/org"
+	"github.com/smallbiznis/railzway-auth/internal/repository"
 	"github.com/smallbiznis/railzway-auth/internal/service"
 	authsvc "github.com/smallbiznis/railzway-auth/internal/service/auth"
 )
 
 // AuthHandler orchestrates OAuth endpoints.
 type AuthHandler struct {
-	Auth      *service.AuthService
-	OAuth     authsvc.OAuthService
-	Discovery *service.DiscoveryService
+	Auth                *service.AuthService
+	OAuth               authsvc.OAuthService
+	Discovery           *service.DiscoveryService
+	AuthorizeStateStore repository.AuthorizeStateStore
 }
 
+const (
+	authorizeStatePrefix = "oauth:authorize:"
+	authorizeStateTTL    = 10 * time.Minute
+)
+
 // NewAuthHandler creates the handler set.
-func NewAuthHandler(auth *service.AuthService, oauth authsvc.OAuthService, discovery *service.DiscoveryService) *AuthHandler {
-	return &AuthHandler{Auth: auth, OAuth: oauth, Discovery: discovery}
+func NewAuthHandler(auth *service.AuthService, oauth authsvc.OAuthService, discovery *service.DiscoveryService, authorizeStateStore repository.AuthorizeStateStore) *AuthHandler {
+	return &AuthHandler{
+		Auth:                auth,
+		OAuth:               oauth,
+		Discovery:           discovery,
+		AuthorizeStateStore: authorizeStateStore,
+	}
 }
 
 // OrgDiscovery returns metadata.
@@ -86,10 +100,23 @@ func (h *AuthHandler) Token(c *gin.Context) {
 		Code         string `form:"code"`
 		RedirectURI  string `form:"redirect_uri"`
 		OTP          string `form:"otp"`
+		ClientID     string `form:"client_id"`
+		ClientSecret string `form:"client_secret"`
 	}
 	if err := c.ShouldBind(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "Invalid token request."})
 		return
+	}
+
+	clientID := strings.TrimSpace(req.ClientID)
+	clientSecret := strings.TrimSpace(req.ClientSecret)
+	if basicID, basicSecret, ok := c.Request.BasicAuth(); ok {
+		if clientID == "" {
+			clientID = strings.TrimSpace(basicID)
+		}
+		if clientSecret == "" {
+			clientSecret = strings.TrimSpace(basicSecret)
+		}
 	}
 
 	issuer := fmt.Sprintf("%s://%s", schemeOnly(c.Request), hostOnly(c.Request))
@@ -106,7 +133,7 @@ func (h *AuthHandler) Token(c *gin.Context) {
 	case "authorization_code":
 		resp, err = h.Auth.AuthorizationCodeGrant(c.Request.Context(), orgCtx, req.Code, req.RedirectURI, req.Scope, issuer)
 	case "client_credentials":
-		resp, err = h.Auth.ClientCredentialsGrant(c.Request.Context())
+		resp, err = h.Auth.ClientCredentialsGrant(c.Request.Context(), orgCtx, clientID, clientSecret, req.Scope, issuer)
 	case "device_code":
 		resp, err = h.Auth.DeviceCodeGrant(c.Request.Context())
 	case "otp", "http://auth0.com/oauth/grant-type/passwordless/otp":
@@ -333,7 +360,7 @@ func (h *AuthHandler) OAuthAuthorize(c *gin.Context) {
 	// Only session cookie authentication is allowed for /oauth/authorize
 	token, _ := c.Cookie("sb_access_token")
 	if strings.TrimSpace(token) == "" {
-		h.redirectAuthorizeLogin(c, req, params)
+		h.redirectAuthorizeLogin(c, orgCtx.Org.ID, req, params)
 		return
 	}
 
@@ -441,7 +468,18 @@ func (h *AuthHandler) validateAuthorizeRedirectURI(ctx context.Context, orgID in
 	return nil
 }
 
-func (h *AuthHandler) redirectAuthorizeLogin(c *gin.Context, req oauthAuthorizeRequest, params oauthAuthorizeParams) {
+func (h *AuthHandler) redirectAuthorizeLogin(c *gin.Context, orgID int64, req oauthAuthorizeRequest, params oauthAuthorizeParams) {
+	if h.AuthorizeStateStore == nil {
+		h.oauthErrorRedirect(c, "server_error", "Authorize state store not configured.")
+		return
+	}
+
+	stateID, err := h.persistAuthorizeState(c.Request.Context(), orgID, req, params)
+	if err != nil {
+		h.oauthErrorRedirect(c, "server_error", "Failed to persist authorize state.")
+		return
+	}
+
 	loginURL := &url.URL{
 		Scheme: schemeOnly(c.Request),
 		Host:   hostOnly(c.Request),
@@ -449,24 +487,7 @@ func (h *AuthHandler) redirectAuthorizeLogin(c *gin.Context, req oauthAuthorizeR
 	}
 
 	q := loginURL.Query()
-	q.Set("client_id", params.clientID)
-	q.Set("redirect_uri", params.redirectURI)
-	q.Set("response_type", params.responseType)
-	if req.Scope != "" {
-		q.Set("scope", req.Scope)
-	}
-	if req.State != "" {
-		q.Set("state", req.State)
-	}
-	if req.Nonce != "" {
-		q.Set("nonce", req.Nonce)
-	}
-	if params.codeChallenge != "" {
-		q.Set("code_challenge", params.codeChallenge)
-	}
-	if params.codeChallengeMethod != "" {
-		q.Set("code_challenge_method", params.codeChallengeMethod)
-	}
+	q.Set("state", stateID)
 
 	loginURL.RawQuery = q.Encode()
 	c.Redirect(http.StatusFound, loginURL.String())
@@ -520,6 +541,38 @@ func (h *AuthHandler) redirectAuthorizeSuccess(c *gin.Context, parsedRedirect *u
 	}
 	parsedRedirect.RawQuery = q.Encode()
 	c.Redirect(http.StatusFound, parsedRedirect.String())
+}
+
+func (h *AuthHandler) persistAuthorizeState(ctx context.Context, orgID int64, req oauthAuthorizeRequest, params oauthAuthorizeParams) (string, error) {
+	if h.AuthorizeStateStore == nil {
+		return "", fmt.Errorf("authorize state store missing")
+	}
+	stateID, err := secureRandomString(32)
+	if err != nil {
+		return "", fmt.Errorf("generate authorize state: %w", err)
+	}
+	payload := domainoauth.AuthorizeState{
+		StateID:             stateID,
+		OrgID:               orgID,
+		ClientID:            params.clientID,
+		RedirectURI:         params.redirectURI,
+		ResponseType:        params.responseType,
+		Scope:               strings.TrimSpace(req.Scope),
+		State:               strings.TrimSpace(req.State),
+		Nonce:               strings.TrimSpace(req.Nonce),
+		CodeChallenge:       strings.TrimSpace(params.codeChallenge),
+		CodeChallengeMethod: strings.TrimSpace(params.codeChallengeMethod),
+		CreatedAt:           time.Now().UTC(),
+	}
+	key := buildAuthorizeStateKey(stateID)
+	if err := h.AuthorizeStateStore.SaveState(ctx, key, payload, authorizeStateTTL); err != nil {
+		return "", fmt.Errorf("persist authorize state: %w", err)
+	}
+	return stateID, nil
+}
+
+func buildAuthorizeStateKey(stateID string) string {
+	return authorizeStatePrefix + strings.TrimSpace(stateID)
 }
 
 // Redirect helper
@@ -579,4 +632,15 @@ func hostOnly(r *http.Request) string {
 		}
 	}
 	return host
+}
+
+func secureRandomString(size int) (string, error) {
+	if size <= 0 {
+		size = 32
+	}
+	buf := make([]byte, size)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(buf), nil
 }

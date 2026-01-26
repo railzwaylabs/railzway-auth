@@ -1,3 +1,17 @@
+# [Unreleased] (2026-01-26)
+
+### Features
+
+* add OAuth authorize login bridge with persisted authorize state and authorize_url response
+* support client_credentials grant with persisted access tokens and basic-auth/form credentials
+* secure admin routes via bearer token scopes (admin/admin:*)
+* update login UI to continue authorize flow using state
+
+### Bug Fixes
+
+* allow oauth_tokens inserts without user_id for client_credentials tokens
+* allow REST auth flows to use request issuer
+
 # 1.0.0 (2026-01-22)
 
 

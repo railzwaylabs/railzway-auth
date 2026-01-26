@@ -19,26 +19,61 @@ export EMAIL="test@valora.dev"
 export PASSWORD="password123"
 ```
 
-## Step 1 — Local Login (Cloud)
+## Step 1 — Start OAuth Authorize (Cloud)
 
 ```bash
-curl -sS -D /tmp/valora_auth.headers \
+AUTH_URL="${CLOUD_BASE_URL}/oauth/authorize?response_type=code&client_id=${CLIENT_ID}&redirect_uri=${OSS_REDIRECT_URI}&scope=openid%20email%20profile&state=smoketest123"
+curl -sS -D /tmp/valora_auth.headers -o /tmp/valora_auth.body "${AUTH_URL}"
+```
+
+Expected:
+- `302` redirect
+- `Location` header pointing to `/login?state=...`
+
+Extract the authorize state:
+
+```bash
+AUTHORIZE_STATE=$(python - <<'PY'
+import re
+with open("/tmp/valora_auth.headers", "r") as f:
+    for line in f:
+        if line.lower().startswith("location:"):
+            m = re.search(r"state=([^&\\s]+)", line)
+            if m:
+                print(m.group(1))
+                break
+PY
+)
+echo "${AUTHORIZE_STATE}"
+```
+
+## Step 2 — Password Login (Cloud)
+
+```bash
+curl -sS -D /tmp/valora_auth.login.headers \
   -c /tmp/valora_auth.cookies \
+  -o /tmp/valora_auth.login.json \
   -H "Content-Type: application/json" \
-  -d "{\"email\":\"${EMAIL}\",\"password\":\"${PASSWORD}\",\"client_id\":\"${CLIENT_ID}\",\"scope\":\"openid email profile\"}" \
+  -d "{\"email\":\"${EMAIL}\",\"password\":\"${PASSWORD}\",\"state\":\"${AUTHORIZE_STATE}\"}" \
   "${CLOUD_BASE_URL}/auth/password/login"
 ```
 
 Expected:
 - `200 OK`
 - `Set-Cookie` for the Cloud session
-- Response `user` includes `org_id` (and `tenant_id` alias)
+- Response includes `authorize_url`
 
-## Step 2 — Authorize (OAuth)
+Extract the authorize URL (using jq):
 
 ```bash
-AUTH_URL="${CLOUD_BASE_URL}/oauth/authorize?response_type=code&client_id=${CLIENT_ID}&redirect_uri=${OSS_REDIRECT_URI}&scope=openid%20email%20profile&state=smoketest123"
-curl -sS -i -b /tmp/valora_auth.cookies "${AUTH_URL}"
+AUTHORIZE_URL=$(jq -r .authorize_url /tmp/valora_auth.login.json)
+echo "${AUTHORIZE_URL}"
+```
+
+## Step 3 — Authorize (OAuth)
+
+```bash
+curl -sS -i -b /tmp/valora_auth.cookies "${CLOUD_BASE_URL}${AUTHORIZE_URL}"
 ```
 
 Expected:
@@ -48,7 +83,7 @@ Expected:
 Extract the code:
 
 ```bash
-AUTH_CODE=$(curl -sS -i -b /tmp/valora_auth.cookies "${AUTH_URL}" | python - <<'PY'
+AUTH_CODE=$(curl -sS -i -b /tmp/valora_auth.cookies "${CLOUD_BASE_URL}${AUTHORIZE_URL}" | python - <<'PY'
 import sys, urllib.parse
 for line in sys.stdin:
     if line.lower().startswith("location:"):
@@ -63,7 +98,7 @@ echo "${AUTH_CODE}"
 
 Or copy the `code` manually from the `Location` header.
 
-## Step 3 — Token Exchange (OSS Side)
+## Step 4 — Token Exchange (OSS Side)
 
 ```bash
 export AUTH_CODE="paste-auth-code"
@@ -81,7 +116,7 @@ Expected:
 - `token_type=Bearer`
 - `expires_in` present
 
-## Step 4 — Userinfo
+## Step 5 — Userinfo
 
 ```bash
 export ACCESS_TOKEN="paste-access-token"
@@ -101,7 +136,7 @@ Expected JSON (fields may include additional data):
 }
 ```
 
-## Step 5 — OSS User Bootstrap (Assertion)
+## Step 6 — OSS User Bootstrap (Assertion)
 
 On the Valora OSS side, verify:
 - User is upserted by `provider=usevalora_cloud` + `external_id=sub`.

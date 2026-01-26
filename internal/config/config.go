@@ -17,7 +17,6 @@ type Config struct {
 	DatabaseURL          string
 	AdminEmail           string
 	AdminPassword        string
-	AdminAPIToken        string
 	DefaultOrgID         int64
 	RedisAddr            string
 	RedisPassword        string
@@ -62,7 +61,6 @@ func Load() (Config, error) {
 		DatabaseURL:          os.Getenv("DATABASE_URL"),
 		AdminEmail:           adminEmail,
 		AdminPassword:        adminPassword,
-		AdminAPIToken:        strings.TrimSpace(os.Getenv("ADMIN_API_TOKEN")),
 		DefaultOrgID:         defaultOrgID,
 		RedisAddr:            getEnv("REDIS_ADDR", "127.0.0.1:6379"),
 		RedisPassword:        os.Getenv("REDIS_PASSWORD"),

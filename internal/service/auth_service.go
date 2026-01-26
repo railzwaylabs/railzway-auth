@@ -293,9 +293,88 @@ func (s *AuthService) DeviceCodeGrant(ctx context.Context) (*TokenResponse, erro
 	return nil, newOAuthError("unsupported_grant_type", "device_code is not enabled.", 400)
 }
 
-// ClientCredentialsGrant is optional and returns unsupported for now.
-func (s *AuthService) ClientCredentialsGrant(ctx context.Context) (*TokenResponse, error) {
-	return nil, newOAuthError("unsupported_grant_type", "client_credentials is not enabled.", 400)
+// ClientCredentialsGrant issues an access token for a client (no user context).
+func (s *AuthService) ClientCredentialsGrant(
+	ctx context.Context,
+	orgCtx *org.Context,
+	clientID string,
+	clientSecret string,
+	scope string,
+	issuer string,
+) (*TokenResponse, error) {
+	ctx, span := s.startSpan(ctx, "AuthService.ClientCredentialsGrant")
+	defer span.End()
+
+	if orgCtx == nil {
+		return nil, newOAuthError("invalid_request", "Org context missing.", http.StatusBadRequest)
+	}
+
+	cleanClient := strings.TrimSpace(clientID)
+	if cleanClient == "" {
+		return nil, newOAuthError("invalid_request", "client_id is required.", http.StatusBadRequest)
+	}
+
+	cleanSecret := strings.TrimSpace(clientSecret)
+	if cleanSecret == "" {
+		return nil, newOAuthError("invalid_client", "client_secret is required.", http.StatusUnauthorized)
+	}
+
+	client, err := s.clients.GetClientByID(ctx, orgCtx.Org.ID, cleanClient)
+	if err != nil {
+		span.RecordError(err)
+		return nil, newOAuthError("unauthorized_client", "Unknown client_id for org.", http.StatusUnauthorized)
+	}
+	if !secureCompare(client.ClientSecret, cleanSecret) {
+		return nil, newOAuthError("invalid_client", "Invalid client_secret.", http.StatusUnauthorized)
+	}
+
+	effectiveScope := normalizeScope(scope)
+	access, err := s.jwt.GenerateAccessToken(ctx, orgCtx.Org, serviceUser(orgCtx.Org.ID, cleanClient), effectiveScope, issuer, []string{"client_credentials"})
+	if err != nil {
+		span.RecordError(err)
+		return nil, fmt.Errorf("generate access token: %w", err)
+	}
+
+	oauthToken := domain.OAuthToken{
+		ID:           s.snowflake.Generate().Int64(),
+		OrgID:        orgCtx.Org.ID,
+		ClientID:     cleanClient,
+		UserID:       0,
+		AccessToken:  access,
+		RefreshToken: "",
+		Scopes:       strings.Fields(effectiveScope),
+		ExpiresAt:    time.Now().Add(s.cfg.AccessTokenTTL),
+		CreatedAt:    time.Now(),
+	}
+
+	if _, err := s.tokens.CreateToken(ctx, oauthToken); err != nil {
+		span.RecordError(err)
+		return nil, fmt.Errorf("persist access token: %w", err)
+	}
+
+	s.audit("client_credentials.issued", "org_id", orgCtx.Org.ID, "client_id", cleanClient)
+	return &TokenResponse{
+		AccessToken:  access,
+		RefreshToken: "",
+		TokenType:    "Bearer",
+		ExpiresIn:    int(s.cfg.AccessTokenTTL.Seconds()),
+	}, nil
+}
+
+func secureCompare(left, right string) bool {
+	if left == "" || right == "" {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(left), []byte(right)) == 1
+}
+
+func serviceUser(orgID int64, clientID string) domain.User {
+	return domain.User{
+		ID:    0,
+		OrgID: orgID,
+		Email: fmt.Sprintf("client:%s", clientID),
+		Name:  "client_credentials",
+	}
 }
 
 func coalesce(values ...string) string {

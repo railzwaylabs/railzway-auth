@@ -349,7 +349,7 @@ type InsertOAuthTokenRow struct {
 	ID           int64
 	TenantID     int64
 	ClientID     string
-	UserID       int64
+	UserID       sql.NullInt64
 	AccessToken  string
 	RefreshToken sql.NullString
 	Scopes       []string
@@ -360,7 +360,7 @@ type InsertOAuthTokenRow struct {
 
 const insertOAuthTokenSQL = `INSERT INTO oauth_tokens (id, tenant_id, client_id, user_id, access_token, refresh_token, scopes, expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id, tenant_id, client_id, user_id, access_token, refresh_token, scopes, expires_at, revoked, created_at`
 
-func (q *Queries) InsertOAuthToken(ctx context.Context, ID, tenantID int64, clientID string, userID int64, accessToken string, refreshToken sql.NullString, scopes []string, expiresAt time.Time) (InsertOAuthTokenRow, error) {
+func (q *Queries) InsertOAuthToken(ctx context.Context, ID, tenantID int64, clientID string, userID sql.NullInt64, accessToken string, refreshToken sql.NullString, scopes []string, expiresAt time.Time) (InsertOAuthTokenRow, error) {
 	row := q.db.QueryRow(ctx, insertOAuthTokenSQL, ID, tenantID, clientID, userID, accessToken, refreshToken, scopes, expiresAt)
 	var res InsertOAuthTokenRow
 	err := row.Scan(&res.ID, &res.TenantID, &res.ClientID, &res.UserID, &res.AccessToken, &res.RefreshToken, &res.Scopes, &res.ExpiresAt, &res.Revoked, &res.CreatedAt)

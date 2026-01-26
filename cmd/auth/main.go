@@ -46,6 +46,7 @@ func main() {
 			newOAuthProviderConfigRepository,
 			newRedisClient,
 			newOAuthStateStore,
+			newAuthorizeStateStore,
 			newOAuthProviderClient,
 			newRateLimiter,
 			org.NewResolver,
@@ -191,6 +192,10 @@ func newOAuthStateStore(client redis.UniversalClient) repository.OAuthStateStore
 	return cacheadapter.NewRedisStateStore(client)
 }
 
+func newAuthorizeStateStore(client redis.UniversalClient) repository.AuthorizeStateStore {
+	return cacheadapter.NewRedisAuthorizeStateStore(client)
+}
+
 func newOAuthProviderClient() oauthadapter.ProviderClient {
 	return oauthadapter.NewHTTPProviderClient(nil)
 }
@@ -215,8 +220,8 @@ func newAuthMiddleware(authService *service.AuthService) *httpmiddleware.Auth {
 	return &httpmiddleware.Auth{AuthService: authService}
 }
 
-func newAdminMiddleware(cfg config.Config) *httpmiddleware.Admin {
-	return httpmiddleware.NewAdmin(cfg)
+func newAdminMiddleware(authService *service.AuthService) *httpmiddleware.Admin {
+	return httpmiddleware.NewAdmin(authService)
 }
 
 func startHTTPServer(lc fx.Lifecycle, srv *server.HTTPServer, cfg config.Config, logger *zap.Logger) {

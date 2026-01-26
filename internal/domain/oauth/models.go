@@ -39,6 +39,21 @@ type OAuthState struct {
 	CreatedAt    time.Time
 }
 
+// AuthorizeState captures OAuth authorize request data persisted during login redirects.
+type AuthorizeState struct {
+	StateID             string
+	OrgID               int64
+	ClientID            string
+	RedirectURI         string
+	ResponseType        string
+	Scope               string
+	State               string
+	Nonce               string
+	CodeChallenge       string
+	CodeChallengeMethod string
+	CreatedAt           time.Time
+}
+
 // OAuthTokenResponse models the response from an external IdP token endpoint.
 type OAuthTokenResponse struct {
 	AccessToken  string

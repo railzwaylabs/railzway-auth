@@ -1,0 +1,31 @@
+# VCS
+.git
+.gitignore
+
+# Go
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+coverage/
+coverage.out
+
+# Node / UI
+node_modules/
+dist/
+build/
+.vite/
+
+# Env / Secrets
+.env
+.env.*
+
+# Logs
+*.log
+
+# OS
+.DS_Store

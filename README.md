@@ -152,8 +152,8 @@ Purpose-built for Next.js dashboards and console apps (JSON in/out). All require
 
 | Method | Path | Handler | Description |
 |--------|------|---------|-------------|
-| `POST` | `/auth/password/login` | `AuthHandler.PasswordLogin` | Issue OAuth tokens for email/password |
-| `POST` | `/auth/password/register` | `AuthHandler.PasswordRegister` | (Stub) Registration entry point |
+| `POST` | `/auth/password/login` | `AuthHandler.PasswordLogin` | Issue OAuth tokens for email/password (optionally continue OAuth authorize flow) |
+| `POST` | `/auth/password/register` | `AuthHandler.PasswordRegister` | (Stub) Registration entry point (optionally continue OAuth authorize flow) |
 | `POST` | `/auth/password/forgot` | `AuthHandler.PasswordForgot` | Initiate password reset |
 | `POST` | `/auth/otp/request` | `AuthHandler.OTPRequest` | Request login OTP via configured channel |
 | `POST` | `/auth/otp/verify` | `AuthHandler.OTPVerify` | Verify OTP and issue tokens |
@@ -178,6 +178,43 @@ Success responses use `AuthTokensWithUser`:
   }
 }
 ```
+
+#### OAuth Authorize Login Bridge (State-Based)
+
+When `/oauth/authorize` is accessed without a valid session cookie, the server:
+
+1. Persists a short-lived **authorize state** (client_id, redirect_uri, scope, state, nonce, PKCE).
+2. Redirects to `/login?state=<id>`.
+
+The login UI (or API client) should send that `state` back to:
+
+```
+POST /auth/password/login
+```
+
+Payload example:
+
+```json
+{
+  "email": "user@org.com",
+  "password": "secret",
+  "state": "<state_from_login_url>"
+}
+```
+
+On success, the response includes an optional `authorize_url`:
+
+```json
+{
+  "access_token": "...",
+  "token_type": "Bearer",
+  "expires_in": 3600,
+  "user": { "id": 123, "email": "user@org.com" },
+  "authorize_url": "/oauth/authorize?client_id=...&redirect_uri=..."
+}
+```
+
+The client should redirect the browser to `authorize_url` to complete the code exchange.
 
 ### User APIs
 
