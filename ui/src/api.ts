@@ -20,3 +20,20 @@ export async function postJSON<T>(path: string, body: unknown): Promise<T> {
 
   return payload as T
 }
+
+export async function getJSON<T>(path: string): Promise<T> {
+  const response = await fetch(path, {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+  })
+
+  const payload = (await response.json().catch(() => ({}))) as T & APIError
+  if (!response.ok) {
+    const message =
+      payload.error_description || payload.error || response.statusText
+    throw new Error(message)
+  }
+
+  return payload as T
+}

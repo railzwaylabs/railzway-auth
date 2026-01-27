@@ -21,6 +21,9 @@ func NewAdminHandler(auth *service.AuthService) *AdminHandler {
 
 type upsertOAuthClientRequest struct {
 	ExternalOrgID            string   `json:"external_org_id"`
+	ClientID                 string   `json:"client_id"`
+	ClientSecret             string   `json:"client_secret"`
+	RotateSecret             bool     `json:"rotate_secret"`
 	RedirectURI              string   `json:"redirect_uri"`
 	RedirectURIs             []string `json:"redirect_uris"`
 	Scopes                   []string `json:"scopes"`
@@ -61,13 +64,18 @@ func (h *AdminHandler) UpsertOAuthClient(c *gin.Context) {
 		return
 	}
 
-	clientID := "railzway-oss-" + externalID
+	clientID := strings.TrimSpace(req.ClientID)
+	if clientID == "" {
+		clientID = "railzway-oss-" + externalID
+	}
 	input := service.OAuthClientInput{
 		ClientID:                 clientID,
+		ClientSecret:             strings.TrimSpace(req.ClientSecret),
 		RedirectURIs:             redirectURIs,
 		Scopes:                   req.Scopes,
 		Grants:                   req.Grants,
 		TokenEndpointAuthMethods: req.TokenEndpointAuthMethods,
+		RotateSecret:             req.RotateSecret,
 	}
 
 	client, err := h.Auth.UpsertOAuthClient(c.Request.Context(), orgCtx.Org.ID, input)

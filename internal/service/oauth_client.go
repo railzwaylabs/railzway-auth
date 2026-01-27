@@ -2,8 +2,11 @@ package service
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
+
+	"github.com/jackc/pgx/v5"
 
 	"github.com/smallbiznis/railzway-auth/internal/domain"
 )
@@ -11,11 +14,13 @@ import (
 // OAuthClientInput describes an OAuth client registration.
 type OAuthClientInput struct {
 	ClientID                 string
+	ClientSecret             string
 	RedirectURIs             []string
 	Scopes                   []string
 	Grants                   []string
 	TokenEndpointAuthMethods []string
 	RequireConsent           bool
+	RotateSecret             bool
 }
 
 // UpsertOAuthClient creates or updates an OAuth client for the given org.
@@ -49,11 +54,23 @@ func (s *AuthService) UpsertOAuthClient(ctx context.Context, orgID int64, input 
 		authMethods = []string{"client_secret_post"}
 	}
 
+	secret := strings.TrimSpace(input.ClientSecret)
+	if secret == "" && !input.RotateSecret {
+		if existing, err := s.clients.GetClientByID(ctx, orgID, clientID); err == nil {
+			secret = strings.TrimSpace(existing.ClientSecret)
+		} else if !errors.Is(err, pgx.ErrNoRows) {
+			return domain.OAuthClient{}, newOAuthError("server_error", "Failed to load OAuth client.", http.StatusInternalServerError)
+		}
+	}
+	if secret == "" {
+		secret = randomString(32)
+	}
+
 	client := domain.OAuthClient{
 		ID:                       s.snowflake.Generate().Int64(),
 		OrgID:                    orgID,
 		ClientID:                 clientID,
-		ClientSecret:             randomString(32),
+		ClientSecret:             secret,
 		RedirectURIs:             redirectURIs,
 		Grants:                   grants,
 		Scopes:                   scopes,
