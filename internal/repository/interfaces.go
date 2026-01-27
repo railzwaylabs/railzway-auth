@@ -10,6 +10,7 @@ import (
 type OrgRepository interface {
 	GetDomainByHost(ctx context.Context, host string) (domain.Domain, error)
 	GetOrg(ctx context.Context, orgID int64) (domain.Org, error)
+	Create(ctx context.Context, org domain.Org) (domain.Org, error)
 	GetOrgBySlug(ctx context.Context, slug string) (domain.Org, error)
 	GetPrimaryDomain(ctx context.Context, orgID int64) (domain.Domain, error)
 	GetBranding(ctx context.Context, orgID int64) (domain.Branding, error)
@@ -40,6 +41,12 @@ type TokenRepository interface {
 type OAuthClientRepository interface {
 	GetClientByID(ctx context.Context, orgID int64, clientID string) (domain.OAuthClient, error)
 	UpsertClient(ctx context.Context, client domain.OAuthClient) (domain.OAuthClient, error)
+}
+
+// OAuthAppRepository manages oauth applications.
+type OAuthAppRepository interface {
+	Create(ctx context.Context, app domain.OAuthApp) (domain.OAuthApp, error)
+	GetByName(ctx context.Context, orgID int64, name string) (domain.OAuthApp, error)
 }
 
 // CodeRepository manages authorization codes.

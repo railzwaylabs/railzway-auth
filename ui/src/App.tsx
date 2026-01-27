@@ -1,5 +1,13 @@
+import AuthBrand from './components/AuthBrand'
+import AuthButton from './components/AuthButton'
+import AuthCard from './components/AuthCard'
+import AuthLayout from './components/AuthLayout'
 import ErrorPage from './pages/Error'
+import ForgotPassword from './pages/ForgotPassword'
 import Login from './pages/Login'
+import OTPRequest from './pages/OtpRequest'
+import OTPVerify from './pages/OtpVerify'
+import Register from './pages/Register'
 
 function App() {
   const path = window.location.pathname
@@ -8,27 +16,45 @@ function App() {
     return <Login />
   }
 
+  if (path === '/register') {
+    return <Register />
+  }
+
+  if (path === '/forgot-password') {
+    return <ForgotPassword />
+  }
+
+  if (path === '/otp/request') {
+    return <OTPRequest />
+  }
+
+  if (path === '/otp/verify') {
+    return <OTPVerify />
+  }
+
   if (path === '/error') {
     return <ErrorPage />
   }
 
   return (
-    <div className="min-h-screen bg-bg-primary text-text-primary">
-      <div className="mx-auto flex min-h-screen w-full max-w-lg flex-col justify-center px-6 py-12">
-        <div className="rounded-3xl border border-border-subtle bg-surface-primary/90 p-8 shadow-2xl shadow-black/20 backdrop-blur">
-          <h1 className="text-2xl font-semibold">Page not found</h1>
-          <p className="mt-3 text-sm text-text-muted">
-            The page you are looking for does not exist.
-          </p>
-          <a
-            className="mt-6 inline-flex items-center rounded-xl border border-border-subtle px-4 py-2 text-sm text-text-primary transition hover:border-brand-primary"
-            href="/login"
-          >
+    <AuthLayout>
+      <AuthCard>
+        <div className="space-y-6">
+          <AuthBrand />
+          <div className="space-y-2">
+            <h1 className="text-2xl font-semibold text-text-primary">
+              Page not found
+            </h1>
+            <p className="text-sm text-text-muted">
+              The page you are looking for does not exist.
+            </p>
+          </div>
+          <AuthButton onClick={() => (window.location.href = '/login')}>
             Go to login
-          </a>
+          </AuthButton>
         </div>
-      </div>
-    </div>
+      </AuthCard>
+    </AuthLayout>
   )
 }
 

@@ -21,15 +21,17 @@ var (
 	_ CodeRepository        = (*PostgresCodeRepo)(nil)
 	_ KeyRepository         = (*PostgresKeyRepo)(nil)
 	_ OAuthClientRepository = (*PostgresOAuthClientRepo)(nil)
+	_ OAuthAppRepository    = (*PostgresOAuthAppRepo)(nil)
 )
 
 // PostgresOrgRepo implements OrgRepository using sqlc.
 type PostgresOrgRepo struct {
-	q *sqlc.Queries
+	q  *sqlc.Queries
+	db *pgxpool.Pool
 }
 
-func NewPostgresOrgRepo(q *sqlc.Queries) *PostgresOrgRepo {
-	return &PostgresOrgRepo{q: q}
+func NewPostgresOrgRepo(db *pgxpool.Pool, q *sqlc.Queries) *PostgresOrgRepo {
+	return &PostgresOrgRepo{q: q, db: db}
 }
 
 func (r *PostgresOrgRepo) GetDomainByHost(ctx context.Context, host string) (domain.Domain, error) {
@@ -45,6 +47,38 @@ func (r *PostgresOrgRepo) GetOrg(ctx context.Context, orgID int64) (domain.Org, 
 	row, err := r.q.GetTenant(ctx, orgID)
 	if err != nil {
 		return domain.Org{}, fmt.Errorf("get org: %w", err)
+	}
+	return mapOrgRow(row), nil
+}
+
+func (r *PostgresOrgRepo) Create(ctx context.Context, org domain.Org) (domain.Org, error) {
+	const query = `
+INSERT INTO tenants (id, type, name, slug, status, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+RETURNING id, type, name, code, slug, country_code, timezone, is_default, status, created_at, updated_at`
+
+	var row sqlc.GetTenantRow
+	err := r.db.QueryRow(ctx, query,
+		org.ID,
+		"organization", // Default type if not in domain.Org, assume structure
+		org.Name,
+		org.Slug,
+		org.Status, // Assuming Active
+	).Scan(
+		&row.ID,
+		&row.Type,
+		&row.Name,
+		&row.Code,
+		&row.Slug,
+		&row.CountryCode,
+		&row.Timezone,
+		&row.IsDefault,
+		&row.Status,
+		&row.CreatedAt,
+		&row.UpdatedAt,
+	)
+	if err != nil {
+		return domain.Org{}, fmt.Errorf("create org: %w", err)
 	}
 	return mapOrgRow(row), nil
 }
@@ -521,6 +555,129 @@ RETURNING id, tenant_id, app_id, client_id, client_secret, redirect_uris, grants
 		TokenEndpointAuthMethods: append([]string{}, authMethods...),
 		RequireConsent:           requireCons,
 		CreatedAt:                createdAt,
+	}, nil
+}
+
+// PostgresOAuthAppRepo implements OAuthAppRepository.
+type PostgresOAuthAppRepo struct {
+	db *pgxpool.Pool
+}
+
+func NewPostgresOAuthAppRepo(pool *pgxpool.Pool) *PostgresOAuthAppRepo {
+	return &PostgresOAuthAppRepo{db: pool}
+}
+
+func (r *PostgresOAuthAppRepo) Create(ctx context.Context, app domain.OAuthApp) (domain.OAuthApp, error) {
+	const query = `
+INSERT INTO oauth_apps (id, tenant_id, name, app_type, description, icon_url, is_active, is_first_party, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
+RETURNING id, tenant_id, name, app_type, description, icon_url, is_active, is_first_party, created_at, updated_at`
+
+	var (
+		rowID           int64
+		rowTenantID     int64
+		rowName         string
+		rowType         string
+		rowDesc         sql.NullString
+		rowIcon         sql.NullString
+		rowActive       sql.NullBool
+		rowFirstParty   sql.NullBool
+		rowCreatedAt    time.Time
+		rowUpdatedAt    time.Time
+	)
+
+	desc := sql.NullString{}
+	if app.Description != "" {
+		desc = sql.NullString{String: app.Description, Valid: true}
+	}
+	icon := sql.NullString{}
+	if app.IconURL != "" {
+		icon = sql.NullString{String: app.IconURL, Valid: true}
+	}
+
+	if err := r.db.QueryRow(ctx, query,
+		app.ID,
+		app.OrgID,
+		app.Name,
+		app.Type,
+		desc,
+		icon,
+		app.IsActive,
+		app.IsFirstParty,
+	).Scan(
+		&rowID,
+		&rowTenantID,
+		&rowName,
+		&rowType,
+		&rowDesc,
+		&rowIcon,
+		&rowActive,
+		&rowFirstParty,
+		&rowCreatedAt,
+		&rowUpdatedAt,
+	); err != nil {
+		return domain.OAuthApp{}, fmt.Errorf("create oauth app: %w", err)
+	}
+
+	return domain.OAuthApp{
+		ID:           rowID,
+		OrgID:        rowTenantID,
+		Name:         rowName,
+		Type:         rowType,
+		Description:  rowDesc.String,
+		IconURL:      rowIcon.String,
+		IsActive:     rowActive.Bool,
+		IsFirstParty: rowFirstParty.Bool,
+		CreatedAt:    rowCreatedAt,
+		UpdatedAt:    rowUpdatedAt,
+	}, nil
+}
+
+func (r *PostgresOAuthAppRepo) GetByName(ctx context.Context, orgID int64, name string) (domain.OAuthApp, error) {
+	const query = `
+SELECT id, tenant_id, name, app_type, description, icon_url, is_active, is_first_party, created_at, updated_at
+FROM oauth_apps
+WHERE tenant_id = $1 AND name = $2`
+
+	var (
+		rowID           int64
+		rowTenantID     int64
+		rowName         string
+		rowType         string
+		rowDesc         sql.NullString
+		rowIcon         sql.NullString
+		rowActive       sql.NullBool
+		rowFirstParty   sql.NullBool
+		rowCreatedAt    time.Time
+		rowUpdatedAt    time.Time
+	)
+
+	if err := r.db.QueryRow(ctx, query, orgID, name).Scan(
+		&rowID,
+		&rowTenantID,
+		&rowName,
+		&rowType,
+		&rowDesc,
+		&rowIcon,
+		&rowActive,
+		&rowFirstParty,
+		&rowCreatedAt,
+		&rowUpdatedAt,
+	); err != nil {
+		return domain.OAuthApp{}, fmt.Errorf("get oauth app: %w", err)
+	}
+
+	return domain.OAuthApp{
+		ID:           rowID,
+		OrgID:        rowTenantID,
+		Name:         rowName,
+		Type:         rowType,
+		Description:  rowDesc.String,
+		IconURL:      rowIcon.String,
+		IsActive:     rowActive.Bool,
+		IsFirstParty: rowFirstParty.Bool,
+		CreatedAt:    rowCreatedAt,
+		UpdatedAt:    rowUpdatedAt,
 	}, nil
 }
 

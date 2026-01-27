@@ -110,6 +110,20 @@ type OAuthIDPConfig struct {
 	UpdatedAt        time.Time
 }
 
+// OAuthApp represents a logical application grouping clients.
+type OAuthApp struct {
+	ID           int64
+	OrgID        int64
+	Name         string
+	Type         string // WEB, MOBILE, M2M
+	Description  string
+	IconURL      string
+	IsActive     bool
+	IsFirstParty bool
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+}
+
 // OAuthClient represents an OAuth2/OIDC client registration.
 type OAuthClient struct {
 	ID                       int64
