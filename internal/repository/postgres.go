@@ -53,16 +53,20 @@ func (r *PostgresOrgRepo) GetOrg(ctx context.Context, orgID int64) (domain.Org, 
 
 func (r *PostgresOrgRepo) Create(ctx context.Context, org domain.Org) (domain.Org, error) {
 	const query = `
-INSERT INTO tenants (id, type, name, slug, status, created_at, updated_at)
-VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
-RETURNING id, type, name, code, slug, country_code, timezone, is_default, status, created_at, updated_at`
+INSERT INTO tenants (id, type, name, slug, external_id, status, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+RETURNING id, type, name, code, slug, external_id, country_code, timezone, is_default, status, created_at, updated_at`
 
 	var row sqlc.GetTenantRow
+	var extID sql.NullString
 	err := r.db.QueryRow(ctx, query,
 		org.ID,
 		"organization", // Default type if not in domain.Org, assume structure
 		org.Name,
 		org.Slug,
+		org.Name,
+		org.Slug,
+		sql.NullString{String: org.ExternalID, Valid: org.ExternalID != ""},
 		org.Status, // Assuming Active
 	).Scan(
 		&row.ID,
@@ -70,6 +74,7 @@ RETURNING id, type, name, code, slug, country_code, timezone, is_default, status
 		&row.Name,
 		&row.Code,
 		&row.Slug,
+		&extID,
 		&row.CountryCode,
 		&row.Timezone,
 		&row.IsDefault,
@@ -80,7 +85,41 @@ RETURNING id, type, name, code, slug, country_code, timezone, is_default, status
 	if err != nil {
 		return domain.Org{}, fmt.Errorf("create org: %w", err)
 	}
-	return mapOrgRow(row), nil
+	res := mapOrgRow(row)
+	res.ExternalID = extID.String
+	return res, nil
+}
+
+func (r *PostgresOrgRepo) GetByExternalID(ctx context.Context, externalID string) (domain.Org, error) {
+	const query = `
+SELECT id, type, name, code, slug, external_id, country_code, timezone, is_default, status, created_at, updated_at
+FROM tenants
+WHERE external_id = $1`
+
+	var (
+		row   sqlc.GetTenantRow
+		extID sql.NullString
+	)
+	err := r.db.QueryRow(ctx, query, externalID).Scan(
+		&row.ID,
+		&row.Type,
+		&row.Name,
+		&row.Code,
+		&row.Slug,
+		&extID,
+		&row.CountryCode,
+		&row.Timezone,
+		&row.IsDefault,
+		&row.Status,
+		&row.CreatedAt,
+		&row.UpdatedAt,
+	)
+	if err != nil {
+		return domain.Org{}, fmt.Errorf("get org by external id: %w", err)
+	}
+	res := mapOrgRow(row)
+	res.ExternalID = extID.String
+	return res, nil
 }
 
 func (r *PostgresOrgRepo) GetOrgBySlug(ctx context.Context, slug string) (domain.Org, error) {

@@ -13,6 +13,7 @@ import (
 
 // OAuthClientInput describes an OAuth client registration.
 type OAuthClientInput struct {
+	AppID                    *int64
 	ClientID                 string
 	ClientSecret             string
 	RedirectURIs             []string
@@ -69,6 +70,7 @@ func (s *AuthService) UpsertOAuthClient(ctx context.Context, orgID int64, input 
 	client := domain.OAuthClient{
 		ID:                       s.snowflake.Generate().Int64(),
 		OrgID:                    orgID,
+		AppID:                    input.AppID,
 		ClientID:                 clientID,
 		ClientSecret:             secret,
 		RedirectURIs:             redirectURIs,

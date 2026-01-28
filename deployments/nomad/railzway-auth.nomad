@@ -27,12 +27,12 @@ job "railzway-auth" {
         "traefik.enable=true",
         
         # HTTPS Router (main)
-        "traefik.http.routers.railzway-auth.rule=Host(`auth.railzway.com`)",
+        "traefik.http.routers.railzway-auth.rule=Host(`accounts.railzway.com`)",
         "traefik.http.routers.railzway-auth.entrypoints=websecure",
         "traefik.http.routers.railzway-auth.tls.certresolver=cloudflare",
         
         # HTTP Router (redirect to HTTPS)
-        "traefik.http.routers.railzway-auth-http.rule=Host(`auth.railzway.com`)",
+        "traefik.http.routers.railzway-auth-http.rule=Host(`accounts.railzway.com`)",
         "traefik.http.routers.railzway-auth-http.entrypoints=web",
         "traefik.http.routers.railzway-auth-http.middlewares=railzway-auth-redirect",
         

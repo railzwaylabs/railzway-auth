@@ -8,6 +8,7 @@ import (
 	"crypto/subtle"
 	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"math"
 	"net/http"
@@ -17,6 +18,7 @@ import (
 	"github.com/bwmarrin/snowflake"
 	gojose "github.com/go-jose/go-jose/v4"
 	gojwt "github.com/go-jose/go-jose/v4/jwt"
+	"github.com/jackc/pgx/v5"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
@@ -60,6 +62,8 @@ type AuthService struct {
 	tokens    repository.TokenRepository
 	codes     repository.CodeRepository
 	clients   repository.OAuthClientRepository
+	apps      repository.OAuthAppRepository
+	orgs      repository.OrgRepository
 	snowflake *snowflake.Node
 	jwt       *jwt.Generator
 	keys      *jwt.KeyManager
@@ -69,12 +73,14 @@ type AuthService struct {
 }
 
 // NewAuthService wires dependencies.
-func NewAuthService(users repository.UserRepository, tokens repository.TokenRepository, codes repository.CodeRepository, clients repository.OAuthClientRepository, snowflake *snowflake.Node, generator *jwt.Generator, keys *jwt.KeyManager, cfg config.Config, logger *zap.Logger) *AuthService {
+func NewAuthService(users repository.UserRepository, tokens repository.TokenRepository, codes repository.CodeRepository, clients repository.OAuthClientRepository, apps repository.OAuthAppRepository, orgs repository.OrgRepository, snowflake *snowflake.Node, generator *jwt.Generator, keys *jwt.KeyManager, cfg config.Config, logger *zap.Logger) *AuthService {
 	return &AuthService{
 		users:     users,
 		tokens:    tokens,
 		codes:     codes,
 		clients:   clients,
+		apps:      apps,
+		orgs:      orgs,
 		snowflake: snowflake,
 		jwt:       generator,
 		keys:      keys,
@@ -82,6 +88,80 @@ func NewAuthService(users repository.UserRepository, tokens repository.TokenRepo
 		logger:    logger,
 		tracer:    otel.Tracer("github.com/smallbiznis/railzway-auth/internal/service"),
 	}
+}
+
+// EnsureOrg gets or creates an organization by external ID.
+func (s *AuthService) EnsureOrg(ctx context.Context, externalID, name, slug string) (domain.Org, error) {
+	ctx, span := s.startSpan(ctx, "AuthService.EnsureOrg")
+	defer span.End()
+
+	if externalID == "" {
+		return domain.Org{}, fmt.Errorf("external_id is required")
+	}
+
+	// 1. Try to find by external ID
+	existing, err := s.orgs.GetByExternalID(ctx, externalID)
+	if err == nil {
+		return existing, nil
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return domain.Org{}, fmt.Errorf("lookup org by external_id: %w", err)
+	}
+
+	// 2. Try to find by slug (fallback/migration scenario)
+	// We want to link this slug to the external ID?
+	// For now, if slug exists but no external ID, we might fail or return it.
+	// Let's assume strict separation: if external ID is not found, we intend to create new
+	// or we found one by slug that matches?
+	// If we blindly create, we might collide on slug.
+	existingSlug, err := s.orgs.GetOrgBySlug(ctx, slug)
+	if err == nil {
+		// Found by slug. Should we update external ID?
+		// For safety, let's just return it. Migrations can backfill external_id.
+		return existingSlug, nil
+	}
+
+	// 3. Create
+	newOrg := domain.Org{
+		ID:          s.snowflake.Generate().Int64(),
+		Name:        name,
+		Slug:        slug,
+		ExternalID:  externalID,
+		Status:      "active",
+		CountryCode: "US", // Default
+		Timezone:    "UTC",
+	}
+	created, err := s.orgs.Create(ctx, newOrg)
+	if err != nil {
+		return domain.Org{}, fmt.Errorf("create org: %w", err)
+	}
+	return created, nil
+}
+
+// EnsureServiceApp gets or creates a default M2M app for the org.
+func (s *AuthService) EnsureServiceApp(ctx context.Context, orgID int64) (domain.OAuthApp, error) {
+	const appName = "Service App"
+	app, err := s.apps.GetByName(ctx, orgID, appName)
+	if err == nil {
+		return app, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return domain.OAuthApp{}, fmt.Errorf("lookup service app: %w", err)
+	}
+
+	newApp := domain.OAuthApp{
+		ID:           s.snowflake.Generate().Int64(),
+		OrgID:        orgID,
+		Name:         appName,
+		Type:         "m2m", // Machine to Machine
+		Description:  "Default application for M2M integrations",
+		IsActive:     true,
+		IsFirstParty: true,
+	}
+	created, err := s.apps.Create(ctx, newApp)
+	if err != nil {
+		return domain.OAuthApp{}, fmt.Errorf("create service app: %w", err)
+	}
+	return created, nil
 }
 
 // PasswordGrant authenticates the user with email/password.
