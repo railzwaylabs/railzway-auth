@@ -49,44 +49,31 @@ jobs:
           docker push ghcr.io/${{ github.repository }}:$VERSION
 
       # ============================================
-      # SLACK NOTIFICATION
+      # DISCORD NOTIFICATION
       # ============================================
-      - name: Notify Slack
+      - name: Notify Discord
         if: steps.semantic.outputs.new_release_published == 'true'
-        uses: slackapi/slack-github-action@v1
-        with:
-          payload: |
-            {
-              "attachments": [
-                { "color": "#5B3CF6" }
-              ],
-              "blocks": [
-                {
-                  "type": "header",
-                  "text": {
-                    "type": "plain_text",
-                    "text": "🚀 New Release: v${{ steps.semantic.outputs.new_release_version }}",
-                    "emoji": true
-                  }
-                },
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "*Repository:* `${{ github.repository }}`\n*Version:* `v${{ steps.semantic.outputs.new_release_version }}`\n\n${{ steps.semantic.outputs.new_release_notes }}"
-                  }
-                },
-                {
-                  "type": "actions",
-                  "elements": [
-                    {
-                      "type": "button",
-                      "text": { "type": "plain_text", "text": "View Release" },
-                      "url": "https://github.com/${{ github.repository }}/releases/tag/v${{ steps.semantic.outputs.new_release_version }}"
-                    }
-                  ]
-                }
-              ]
-            }
         env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          RELEASE_NOTES=$(echo '${{ steps.semantic.outputs.new_release_notes }}' | head -c 1000)
+          
+          curl -H "Content-Type: application/json" \
+            -d "{
+              \"embeds\": [{
+                \"title\": \"🚀 New Release: v${{ steps.semantic.outputs.new_release_version }}\",
+                \"description\": \"**Repository:** \`${{ github.repository }}\`\n**Version:** \`v${{ steps.semantic.outputs.new_release_version }}\`\",
+                \"color\": 5814518,
+                \"fields\": [
+                  {
+                    \"name\": \"Release Notes\",
+                    \"value\": \"${RELEASE_NOTES}\"
+                  }
+                ],
+                \"footer\": {
+                  \"text\": \"Railzway Auth\"
+                },
+                \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%S.000Z)\"
+              }]
+            }" \
+            $DISCORD_WEBHOOK
