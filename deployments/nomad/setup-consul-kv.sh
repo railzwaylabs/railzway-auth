@@ -4,7 +4,7 @@
 
 set -e
 
-ENV_FILE="${1:-.env}"
+ENV_FILE="${1:-.env.auth}"
 
 if [ ! -f "$ENV_FILE" ]; then
   echo "❌ Error: $ENV_FILE not found"

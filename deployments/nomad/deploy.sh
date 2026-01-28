@@ -9,8 +9,8 @@ echo "==========================================="
 echo ""
 
 # Configuration
-DEPLOY_DIR="/opt/railzway/deployments"
-ENV_FILE="/opt/railzway/.env.auth"
+DEPLOY_DIR="/opt/railzway/railzway-auth"
+ENV_FILE="/opt/railzway/railzway-auth/.env"
 VERSION="${1:-v1.0.0}"
 
 # Colors
