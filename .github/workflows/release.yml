@@ -1,20 +1,26 @@
-name: Release
+name: Release & Deploy
 
 on:
   push:
     branches: [main]
 
-permissions:
-  contents: write
-  packages: write
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  # Step 1: Semantic Release (creates tag & GitHub release)
   release:
+    name: Semantic Release
     runs-on: ubuntu-latest
-
+    permissions:
+      contents: write
+      packages: write
+    outputs:
+      new_release_published: ${{ steps.semantic.outputs.new_release_published }}
+      new_release_version: ${{ steps.semantic.outputs.new_release_version }}
     steps:
-      - name: Checkout full history
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -31,49 +37,131 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # ============================================
-      # AUTO BUILD + PUSH DOCKER IMAGE (GHCR)
-      # ============================================
-      - name: Build and push Docker image
+      - name: Release Output
         if: steps.semantic.outputs.new_release_published == 'true'
         run: |
-          VERSION=v${{ steps.semantic.outputs.new_release_version }}
+          echo "🎉 New release published: v${{ steps.semantic.outputs.new_release_version }}"
 
-          echo "🔐 Logging into GHCR..."
-          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+  # Step 2: Build & Push Docker Image
+  build:
+    name: Build & Push
+    needs: release
+    if: needs.release.outputs.new_release_published == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
 
-          echo "🐳 Building Docker image..."
-          docker build -t ghcr.io/${{ github.repository }}:$VERSION .
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-          echo "📦 Pushing image to GHCR..."
-          docker push ghcr.io/${{ github.repository }}:$VERSION
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=v${{ needs.release.outputs.new_release_version }}
+            type=semver,pattern=v{{major}}.{{minor}},value=v${{ needs.release.outputs.new_release_version }}
+            type=sha
 
-      # ============================================
-      # DISCORD NOTIFICATION
-      # ============================================
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  # Step 3: Deploy to Nomad
+  deploy:
+    name: Deploy to Nomad
+    needs: [release, build]
+    if: needs.release.outputs.new_release_published == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to Nomad via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GCE_HOST_PROD_1 }}
+          username: ${{ secrets.GCE_USERNAME_PROD_1 }}
+          key: ${{ secrets.GCE_SSH_KEY_PROD_1 }}
+          script: |
+            # Set version for Nomad job
+            export VERSION=v${{ needs.release.outputs.new_release_version }}
+            
+            # Inject GITHUB_TOKEN into Consul KV for Docker auth
+            consul kv put railzway-auth/github_token "${{ secrets.GITHUB_TOKEN }}"
+            
+            # Submit Nomad job with new version
+            nomad job run \
+              -var="version=${VERSION}" \
+              -var="github_token=${{ secrets.GITHUB_TOKEN }}" \
+              /opt/railzway/deployments/railzway-auth.nomad
+            
+            # Wait for deployment to stabilize
+            echo "Waiting for deployment to stabilize..."
+            sleep 15
+            
+            # Check deployment status
+            nomad job status railzway-auth
+
+      - name: Verify Deployment
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GCE_HOST_PROD_1 }}
+          username: ${{ secrets.GCE_USERNAME_PROD_1 }}
+          key: ${{ secrets.GCE_SSH_KEY_PROD_1 }}
+          script: |
+            # Wait for service to be ready
+            sleep 10
+
+            # Health check via Nomad service
+            ALLOC_ID=$(nomad job allocs railzway-auth | grep running | head -1 | awk '{print $1}')
+            
+            if [ -z "$ALLOC_ID" ]; then
+              echo "❌ No running allocation found!"
+              nomad job status railzway-auth
+              exit 1
+            fi
+            
+            echo "✅ Allocation $ALLOC_ID is running"
+            
+            # Get service IP and port from Consul HTTP API
+            SERVICE_INFO=$(curl -s http://localhost:8500/v1/health/service/railzway-auth?passing=true | jq -r '.[0].Service | "\(.Address):\(.Port)"')
+            SERVICE_IP=$(echo $SERVICE_INFO | cut -d: -f1)
+            SERVICE_PORT=$(echo $SERVICE_INFO | cut -d: -f2)
+            
+            # Check health endpoint
+            if [ -n "$SERVICE_IP" ] && [ -n "$SERVICE_PORT" ] && [ "$SERVICE_IP" != "null" ]; then
+              echo "Service discovered at: http://$SERVICE_IP:$SERVICE_PORT"
+              if curl -f http://$SERVICE_IP:$SERVICE_PORT/health; then
+                echo "✅ Health check passed! (http://$SERVICE_IP:$SERVICE_PORT/health)"
+              else
+                echo "❌ Health check failed!"
+                echo "Service: http://$SERVICE_IP:$SERVICE_PORT/health"
+                nomad alloc logs $ALLOC_ID server
+                exit 1
+              fi
+            else
+              echo "❌ Could not get service IP from Consul"
+              nomad alloc logs $ALLOC_ID server
+              exit 1
+            fi
+
       - name: Notify Discord
-        if: steps.semantic.outputs.new_release_published == 'true'
+        if: success()
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
-          RELEASE_NOTES=$(echo '${{ steps.semantic.outputs.new_release_notes }}' | head -c 1000)
-          
           curl -H "Content-Type: application/json" \
-            -d "{
-              \"embeds\": [{
-                \"title\": \"🚀 New Release: v${{ steps.semantic.outputs.new_release_version }}\",
-                \"description\": \"**Repository:** \`${{ github.repository }}\`\n**Version:** \`v${{ steps.semantic.outputs.new_release_version }}\`\",
-                \"color\": 5814518,
-                \"fields\": [
-                  {
-                    \"name\": \"Release Notes\",
-                    \"value\": \"${RELEASE_NOTES}\"
-                  }
-                ],
-                \"footer\": {
-                  \"text\": \"Railzway Auth\"
-                },
-                \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%S.000Z)\"
-              }]
-            }" \
+            -d "{\"embeds\":[{\"title\":\"✅ Deployment Successful\",\"description\":\"**Repository:** \`${{ github.repository }}\`\\n**Version:** \`v${{ needs.release.outputs.new_release_version }}\`\\n**Environment:** Production\",\"color\":3066993,\"fields\":[{\"name\":\"Status\",\"value\":\"Deployed to Nomad\",\"inline\":true},{\"name\":\"Health Check\",\"value\":\"✅ Passed\",\"inline\":true}],\"footer\":{\"text\":\"Railzway Auth\"},\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%S.000Z)\"}]}" \
             $DISCORD_WEBHOOK

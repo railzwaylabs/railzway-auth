@@ -16,9 +16,7 @@ job "railzway-auth" {
     count = 1
 
     network {
-      port "http" {
-        static = 8082
-      }
+      port "http" {}
     }
 
     service {
