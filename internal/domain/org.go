@@ -27,6 +27,7 @@ type Org struct {
 	Name        string
 	Code        string
 	Slug        string
+	ExternalID  string
 	CountryCode string
 	Timezone    string
 	IsDefault   bool

@@ -12,6 +12,7 @@ type OrgRepository interface {
 	GetOrg(ctx context.Context, orgID int64) (domain.Org, error)
 	Create(ctx context.Context, org domain.Org) (domain.Org, error)
 	GetOrgBySlug(ctx context.Context, slug string) (domain.Org, error)
+	GetByExternalID(ctx context.Context, externalID string) (domain.Org, error)
 	GetPrimaryDomain(ctx context.Context, orgID int64) (domain.Domain, error)
 	GetBranding(ctx context.Context, orgID int64) (domain.Branding, error)
 	ListAuthProviders(ctx context.Context, orgID int64) ([]domain.AuthProvider, error)
