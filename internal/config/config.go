@@ -14,7 +14,12 @@ import (
 type Config struct {
 	Environment          string
 	HTTPPort             string
-	DatabaseURL          string
+	DBHost               string
+	DBPort               string
+	DBName               string
+	DBUser               string
+	DBPassword           string
+	DBSSLMode            string
 	AdminEmail           string
 	AdminPassword        string
 	DefaultOrgID         int64
@@ -26,12 +31,18 @@ type Config struct {
 	RefreshTokenBytes    int
 	ServiceName          string
 	RateLimitRPM         int
-	TelemetryEndpoint    string
-	TelemetryInsecure    bool
+	OTLPEndpoint         string
+	OTLPInsecure         bool
 	CORSAllowedOrigins   []string
 	CORSAllowedMethods   []string
 	CORSAllowedHeaders   []string
 	CORSAllowCredentials bool
+}
+
+// DSN returns the database connection string.
+func (c Config) DSN() string {
+	return fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s",
+		c.DBUser, c.DBPassword, c.DBHost, c.DBPort, c.DBName, c.DBSSLMode)
 }
 
 // Load reads configuration from environment variables with sane defaults.
@@ -58,7 +69,12 @@ func Load() (Config, error) {
 	cfg := Config{
 		Environment:          getEnv("APP_ENV", "development"),
 		HTTPPort:             getEnv("HTTP_PORT", "8080"),
-		DatabaseURL:          os.Getenv("DATABASE_URL"),
+		DBHost:               getEnv("DB_HOST", "localhost"),
+		DBPort:               getEnv("DB_PORT", "5432"),
+		DBName:               getEnv("DB_NAME", "postgres"),
+		DBUser:               getEnv("DB_USER", "postgres"),
+		DBPassword:           getEnv("DB_PASSWORD", ""),
+		DBSSLMode:            getEnv("DB_SSL_MODE", "disable"),
 		AdminEmail:           adminEmail,
 		AdminPassword:        adminPassword,
 		DefaultOrgID:         defaultOrgID,
@@ -68,18 +84,14 @@ func Load() (Config, error) {
 		AccessTokenTTL:       getDuration("ACCESS_TOKEN_TTL", time.Hour),
 		RefreshTokenTTL:      getDuration("REFRESH_TOKEN_TTL", 30*24*time.Hour),
 		RefreshTokenBytes:    getInt("REFRESH_TOKEN_BYTES", 32),
-		ServiceName:          getEnv("SERVICE_NAME", "smallbiznis-auth"),
+		ServiceName:          getEnv("SERVICE_NAME", "railzway-auth"),
 		RateLimitRPM:         getInt("RATE_LIMIT_RPM", 600),
-		TelemetryEndpoint:    os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
-		TelemetryInsecure:    getBool("OTEL_EXPORTER_OTLP_INSECURE", true),
+		OTLPEndpoint:         os.Getenv("OTLP_ENDPOINT"),
+		OTLPInsecure:         getBool("OTLP_INSECURE", true),
 		CORSAllowedOrigins:   getList("CORS_ALLOWED_ORIGINS", []string{"*"}),
 		CORSAllowedMethods:   getList("CORS_ALLOWED_METHODS", []string{"GET", "POST", "OPTIONS"}),
 		CORSAllowedHeaders:   getList("CORS_ALLOWED_HEADERS", []string{"Authorization", "Content-Type"}),
 		CORSAllowCredentials: getBool("CORS_ALLOW_CREDENTIALS", false),
-	}
-
-	if cfg.DatabaseURL == "" {
-		return Config{}, fmt.Errorf("DATABASE_URL is required")
 	}
 
 	if cfg.RefreshTokenBytes < 32 {

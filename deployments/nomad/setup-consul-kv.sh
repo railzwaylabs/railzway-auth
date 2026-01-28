@@ -21,7 +21,12 @@ source "$ENV_FILE"
 set +a
 
 # Database
-consul kv put railzway-auth/database_url "$DATABASE_URL"
+consul kv put railzway-auth/db_host "$DB_HOST"
+consul kv put railzway-auth/db_port "$DB_PORT"
+consul kv put railzway-auth/db_name "$DB_NAME"
+consul kv put railzway-auth/db_user "$DB_USER"
+consul kv put railzway-auth/db_password "$DB_PASSWORD"
+consul kv put railzway-auth/db_ssl_mode "$DB_SSL_MODE"
 
 # Redis
 consul kv put railzway-auth/redis_addr "${REDIS_ADDR:-127.0.0.1:6379}"
@@ -48,8 +53,8 @@ consul kv put railzway-auth/cors_allowed_headers "${CORS_ALLOWED_HEADERS:-Author
 consul kv put railzway-auth/cors_allow_credentials "${CORS_ALLOW_CREDENTIALS:-false}"
 
 # Observability
-consul kv put railzway-auth/otel_exporter_otlp_endpoint "${OTEL_EXPORTER_OTLP_ENDPOINT:-}"
-consul kv put railzway-auth/otel_exporter_otlp_insecure "${OTEL_EXPORTER_OTLP_INSECURE:-true}"
+consul kv put railzway-auth/otlp_endpoint "${OTLP_ENDPOINT:-}"
+consul kv put railzway-auth/otlp_insecure "${OTLP_INSECURE:-true}"
 
 echo ""
 echo "✅ Consul KV populated successfully!"

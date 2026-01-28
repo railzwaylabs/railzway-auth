@@ -549,3 +549,6 @@ INSERT INTO otp_configs (tenant_id, channel, provider, api_key, sender, template
 VALUES
     (1000, 'sms', 'debug', 'local-dev', 'Railzway', 'Your OTP is {{code}}', 300),
 ON CONFLICT DO NOTHING;
+
+ALTER TABLE tenants ADD COLUMN external_id VARCHAR(255);
+CREATE UNIQUE INDEX idx_tenants_external_id ON tenants(external_id);

@@ -76,7 +76,12 @@ job "railzway-auth" {
       template {
         data = <<EOH
 # Database
-DATABASE_URL={{ key "railzway-auth/database_url" }}
+DB_HOST={{ key "railzway-auth/db_host" }}
+DB_PORT={{ key "railzway-auth/db_port" }}
+DB_NAME={{ key "railzway-auth/db_name" }}
+DB_USER={{ key "railzway-auth/db_user" }}
+DB_PASSWORD={{ key "railzway-auth/db_password" }}
+DB_SSL_MODE={{ key "railzway-auth/db_ssl_mode" }}
 
 # Redis
 REDIS_ADDR={{ key "railzway-auth/redis_addr" }}
@@ -103,8 +108,8 @@ CORS_ALLOWED_HEADERS={{ keyOrDefault "railzway-auth/cors_allowed_headers" "Autho
 CORS_ALLOW_CREDENTIALS={{ keyOrDefault "railzway-auth/cors_allow_credentials" "false" }}
 
 # Observability
-OTEL_EXPORTER_OTLP_ENDPOINT={{ keyOrDefault "railzway-auth/otel_exporter_otlp_endpoint" "" }}
-OTEL_EXPORTER_OTLP_INSECURE={{ keyOrDefault "railzway-auth/otel_exporter_otlp_insecure" "true" }}
+OTLP_ENDPOINT={{ keyOrDefault "railzway-auth/otlp_endpoint" "" }}
+OTLP_INSECURE={{ keyOrDefault "railzway-auth/otlp_insecure" "true" }}
 EOH
         destination = "secrets/file.env"
         env         = true

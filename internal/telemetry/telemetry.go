@@ -41,7 +41,7 @@ func (p *Provider) Shutdown(ctx context.Context) error {
 
 // New configures OpenTelemetry tracing. When endpoint is empty it installs a noop provider.
 func New(ctx context.Context, cfg config.Config, logger *zap.Logger) (*Provider, error) {
-	if cfg.TelemetryEndpoint == "" {
+	if cfg.OTLPEndpoint == "" {
 		otel.SetTracerProvider(trace.NewNoopTracerProvider())
 		otel.SetTextMapPropagator(propagation.TraceContext{})
 		return &Provider{
@@ -53,9 +53,9 @@ func New(ctx context.Context, cfg config.Config, logger *zap.Logger) (*Provider,
 	}
 
 	clientOpts := []otlptracehttp.Option{
-		otlptracehttp.WithEndpoint(cfg.TelemetryEndpoint),
+		otlptracehttp.WithEndpoint(cfg.OTLPEndpoint),
 	}
-	if cfg.TelemetryInsecure {
+	if cfg.OTLPInsecure {
 		clientOpts = append(clientOpts, otlptracehttp.WithInsecure())
 	}
 
@@ -91,7 +91,7 @@ func New(ctx context.Context, cfg config.Config, logger *zap.Logger) (*Provider,
 	))
 
 	if logger != nil {
-		logger.Info("telemetry enabled", zap.String("endpoint", cfg.TelemetryEndpoint))
+		logger.Info("telemetry enabled", zap.String("endpoint", cfg.OTLPEndpoint))
 	}
 
 	return &Provider{
