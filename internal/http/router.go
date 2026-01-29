@@ -64,6 +64,12 @@ func NewRouter(cfg config.Config, authHandler *handler.AuthHandler, adminHandler
 	r.GET("/.well-known/openid-configuration", authHandler.OpenIDConfig)
 	r.GET("/.well-known/jwks.json", authHandler.JWKS)
 
+	r.GET("/authorize", authHandler.OAuthAuthorize)
+	r.POST("/token", authHandler.Token)
+	r.POST("/introspect", authHandler.OAuthIntrospect)
+	r.POST("/revoke", authHandler.OAuthRevoke)
+	r.GET("/userinfo", authHandler.OAuthUserInfo)
+
 	oauth := r.Group("/oauth")
 	{
 		oauth.POST("/token", authHandler.Token)
