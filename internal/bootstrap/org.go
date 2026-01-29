@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/bwmarrin/snowflake"
-	"github.com/jackc/pgx/v5"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 
