@@ -36,7 +36,7 @@ func ensureOrg(ctx context.Context, cfg config.Config, orgs repository.OrgReposi
 	}
 
 	// Create default org
-	orgID := node.Generate().Int64()
+	orgID := 2016070718164307968
 	newOrg := domain.Org{
 		ID:        orgID,
 		Name:      "Default Organization",
