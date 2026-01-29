@@ -6,19 +6,19 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 -- ==========================================================
 -- COUNTRIES & TIMEZONES
 -- ==========================================================
-CREATE TABLE countries(
+CREATE TABLE IF NOT EXISTS countries(
     code TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     locale TEXT NOT NULL,
     currency TEXT NOT NULL
 );
 
-CREATE TABLE timezones(
+CREATE TABLE IF NOT EXISTS timezones(
     tz TEXT PRIMARY KEY,
     country_code TEXT NOT NULL REFERENCES countries(code)
 );
 
-CREATE INDEX idx_timezones_country_code ON timezones(country_code);
+CREATE INDEX IF NOT EXISTS idx_timezones_country_code ON timezones(country_code);
 
 -- ==========================================================
 -- ENUM TYPES
@@ -50,7 +50,7 @@ END $$;
 -- ==========================================================
 -- TENANTS
 -- ==========================================================
-CREATE TABLE tenants (
+CREATE TABLE IF NOT EXISTS tenants (
     id BIGINT PRIMARY KEY,
     type tenant_type NOT NULL,
     name TEXT NOT NULL,
@@ -64,13 +64,13 @@ CREATE TABLE tenants (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_tenant_slug ON tenants(slug);
-CREATE INDEX idx_tenant_code ON tenants(code);
+CREATE INDEX IF NOT EXISTS idx_tenant_slug ON tenants(slug);
+CREATE INDEX IF NOT EXISTS idx_tenant_code ON tenants(code);
 
 -- ==========================================================
 -- USERS
 -- ==========================================================
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
     id BIGINT PRIMARY KEY,
     tenant_id BIGINT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
 
@@ -92,13 +92,13 @@ CREATE TABLE users (
     UNIQUE (tenant_id, email)
 );
 
-CREATE INDEX idx_users_email ON users(email);
-CREATE INDEX idx_users_status ON users(status);
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_status ON users(status);
 
 -- ==========================================================
 -- TENANT USERS (RBAC)
 -- ==========================================================
-CREATE TABLE tenant_users (
+CREATE TABLE IF NOT EXISTS tenant_users (
     tenant_user_id BIGINT PRIMARY KEY,
 
     tenant_id BIGINT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
@@ -117,15 +117,15 @@ CREATE TABLE tenant_users (
     UNIQUE (tenant_id, user_id)
 );
 
-CREATE INDEX idx_tenant_users_tenant ON tenant_users(tenant_id);
-CREATE INDEX idx_tenant_users_user ON tenant_users(user_id);
-CREATE INDEX idx_tenant_users_role ON tenant_users(role);
-CREATE INDEX idx_tenant_users_status ON tenant_users(status);
+CREATE INDEX IF NOT EXISTS idx_tenant_users_tenant ON tenant_users(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_tenant_users_user ON tenant_users(user_id);
+CREATE INDEX IF NOT EXISTS idx_tenant_users_role ON tenant_users(role);
+CREATE INDEX IF NOT EXISTS idx_tenant_users_status ON tenant_users(status);
 
 -- ==========================================================
 -- TENANT AUTH PROVIDERS (MASTER ENABLE/DISABLE)
 -- ==========================================================
-CREATE TABLE tenant_auth_providers (
+CREATE TABLE IF NOT EXISTS tenant_auth_providers (
     id BIGINT PRIMARY KEY,
     tenant_id BIGINT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
 
@@ -150,13 +150,13 @@ CREATE TABLE tenant_auth_providers (
     UNIQUE (tenant_id, provider_type)
 );
 
-CREATE INDEX idx_tenant_auth_providers_tenant 
+CREATE INDEX IF NOT EXISTS idx_tenant_auth_providers_tenant 
     ON tenant_auth_providers(tenant_id);
 
 -- ==========================================================
 -- PASSWORD AUTH CONFIG
 -- ==========================================================
-CREATE TABLE password_configs (
+CREATE TABLE IF NOT EXISTS password_configs (
     tenant_id BIGINT PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
 
     min_length INT DEFAULT 8,
@@ -177,7 +177,7 @@ CREATE TABLE password_configs (
 -- ==========================================================
 -- OTP AUTH CONFIG
 -- ==========================================================
-CREATE TABLE otp_configs (
+CREATE TABLE IF NOT EXISTS otp_configs (
     tenant_id BIGINT PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
 
     channel VARCHAR(20) NOT NULL DEFAULT 'sms'
@@ -197,7 +197,7 @@ CREATE TABLE otp_configs (
 -- ==========================================================
 -- TENANT DOMAINS
 -- ==========================================================
-CREATE TABLE domains (
+CREATE TABLE IF NOT EXISTS domains (
     id BIGINT PRIMARY KEY,
     tenant_id BIGINT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
 
@@ -219,16 +219,16 @@ CREATE TABLE domains (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_domains_tenant_id ON domains(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_domains_tenant_id ON domains(tenant_id);
 
-CREATE UNIQUE INDEX uniq_primary_domain_per_tenant
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_primary_domain_per_tenant
     ON domains(tenant_id)
     WHERE is_primary = TRUE;
 
 -- ==========================================================
 -- BRANDING / THEME
 -- ==========================================================
-CREATE TABLE brandings (
+CREATE TABLE IF NOT EXISTS brandings (
     tenant_id BIGINT PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
 
     logo_url TEXT,
@@ -252,7 +252,7 @@ CREATE TABLE brandings (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_branding_tenant_id ON brandings(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_branding_tenant_id ON brandings(tenant_id);
 
 -- ==========================================================
 -- OAUTH APPS
@@ -263,7 +263,7 @@ EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;
 
-CREATE TABLE oauth_apps (
+CREATE TABLE IF NOT EXISTS oauth_apps (
     id BIGINT PRIMARY KEY,
     tenant_id BIGINT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
 
@@ -281,12 +281,12 @@ CREATE TABLE oauth_apps (
     UNIQUE (tenant_id, name)
 );
 
-CREATE INDEX idx_oauth_apps_tenant_id ON oauth_apps(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_oauth_apps_tenant_id ON oauth_apps(tenant_id);
 
 -- ==========================================================
 -- OAUTH CLIENTS
 -- ==========================================================
-CREATE TABLE oauth_clients (
+CREATE TABLE IF NOT EXISTS oauth_clients (
     id BIGINT PRIMARY KEY,
     tenant_id BIGINT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     app_id BIGINT REFERENCES oauth_apps(id) ON DELETE CASCADE,
@@ -303,13 +303,13 @@ CREATE TABLE oauth_clients (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_oauth_clients_tenant_id ON oauth_clients(tenant_id);
-CREATE INDEX idx_oauth_clients_client_id ON oauth_clients(client_id);
+CREATE INDEX IF NOT EXISTS idx_oauth_clients_tenant_id ON oauth_clients(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_oauth_clients_client_id ON oauth_clients(client_id);
 
 -- ==========================================================
 -- OAUTH CODES
 -- ==========================================================
-CREATE TABLE oauth_codes (
+CREATE TABLE IF NOT EXISTS oauth_codes (
     id BIGINT PRIMARY KEY,
     tenant_id BIGINT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
 
@@ -328,14 +328,14 @@ CREATE TABLE oauth_codes (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_oauth_codes_tenant_id ON oauth_codes(tenant_id);
-CREATE INDEX idx_oauth_codes_client_id ON oauth_codes(client_id);
-CREATE INDEX idx_oauth_codes_code ON oauth_codes(code);
+CREATE INDEX IF NOT EXISTS idx_oauth_codes_tenant_id ON oauth_codes(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_oauth_codes_client_id ON oauth_codes(client_id);
+CREATE INDEX IF NOT EXISTS idx_oauth_codes_code ON oauth_codes(code);
 
 -- ==========================================================
 -- OAUTH TOKENS
 -- ==========================================================
-CREATE TABLE oauth_tokens (
+CREATE TABLE IF NOT EXISTS oauth_tokens (
     id BIGINT PRIMARY KEY,
     tenant_id BIGINT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
 
@@ -352,14 +352,14 @@ CREATE TABLE oauth_tokens (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_oauth_tokens_tenant_id ON oauth_tokens(tenant_id);
-CREATE INDEX idx_oauth_tokens_access_token ON oauth_tokens(access_token);
-CREATE INDEX idx_oauth_tokens_refresh_token ON oauth_tokens(refresh_token);
+CREATE INDEX IF NOT EXISTS idx_oauth_tokens_tenant_id ON oauth_tokens(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_oauth_tokens_access_token ON oauth_tokens(access_token);
+CREATE INDEX IF NOT EXISTS idx_oauth_tokens_refresh_token ON oauth_tokens(refresh_token);
 
 -- ==========================================================
 -- OAUTH SIGNING KEYS (PER TENANT)
 -- ==========================================================
-CREATE TABLE oauth_keys (
+CREATE TABLE IF NOT EXISTS oauth_keys (
     id BIGINT PRIMARY KEY,
     tenant_id BIGINT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
 
@@ -372,12 +372,12 @@ CREATE TABLE oauth_keys (
     rotated_at TIMESTAMPTZ
 );
 
-CREATE INDEX idx_oauth_keys_tenant_id ON oauth_keys(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_oauth_keys_tenant_id ON oauth_keys(tenant_id);
 
 -- ==========================================================
 -- IDENTITY PROVIDER CONFIGS (GOOGLE, APPLE, OIDC)
 -- ==========================================================
-CREATE TABLE oauth_idp_configs (
+CREATE TABLE IF NOT EXISTS oauth_idp_configs (
     id BIGINT PRIMARY KEY,
     tenant_id BIGINT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
 
@@ -400,12 +400,12 @@ CREATE TABLE oauth_idp_configs (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_oauth_idp_configs_tenant ON oauth_idp_configs(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_oauth_idp_configs_tenant ON oauth_idp_configs(tenant_id);
 
 -- ==========================================================
 -- SAML CONFIGS
 -- ==========================================================
-CREATE TABLE saml_idp_configs (
+CREATE TABLE IF NOT EXISTS saml_idp_configs (
     id BIGINT PRIMARY KEY,
     tenant_id BIGINT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
 
@@ -423,12 +423,12 @@ CREATE TABLE saml_idp_configs (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_saml_idp_configs_tenant ON saml_idp_configs(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_saml_idp_configs_tenant ON saml_idp_configs(tenant_id);
 
 -- ==========================================================
 -- USER IDENTITIES
 -- ==========================================================
-CREATE TABLE oauth_user_identities (
+CREATE TABLE IF NOT EXISTS oauth_user_identities (
     id BIGINT PRIMARY KEY,
 
     user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -550,5 +550,5 @@ VALUES
     (2016070718164307968, 'sms', 'debug', 'local-dev', 'Railzway', 'Your OTP is {{code}}', 300)
 ON CONFLICT DO NOTHING;
 
-ALTER TABLE tenants ADD COLUMN external_id VARCHAR(255);
-CREATE UNIQUE INDEX idx_tenants_external_id ON tenants(external_id);
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS external_id VARCHAR(255);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_tenants_external_id ON tenants(external_id);
