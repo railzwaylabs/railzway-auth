@@ -35,8 +35,10 @@ type AuthHandler struct {
 }
 
 const (
-	authorizeStatePrefix = "oauth:authorize:"
-	authorizeStateTTL    = 10 * time.Minute
+	authorizeStatePrefix   = "oauth:authorize:"
+	authorizeStateTTL      = 10 * time.Minute
+	CookieNameAccessToken  = "_access_token"
+	CookieNameRefreshToken = "_refresh_token"
 )
 
 // NewAuthHandler creates the handler set.
@@ -231,8 +233,8 @@ func (h *AuthHandler) OAuthCallback(c *gin.Context) {
 		return
 	}
 
-	h.setCookie(c, "_access_token", session.AccessToken, int(session.ExpiresIn))
-	h.setCookie(c, "_refresh_token", session.RefreshToken, int(session.ExpiresIn))
+	h.setCookie(c, CookieNameAccessToken, session.AccessToken, int(session.ExpiresIn))
+	h.setCookie(c, CookieNameRefreshToken, session.RefreshToken, int(session.ExpiresIn))
 
 	redirect := strings.TrimSpace(c.Query("redirect_uri"))
 	if redirect == "" {
@@ -353,7 +355,7 @@ func (h *AuthHandler) OAuthAuthorize(c *gin.Context) {
 	}
 
 	// Only session cookie authentication is allowed for /oauth/authorize
-	token, _ := c.Cookie("sb_access_token")
+	token, _ := c.Cookie(CookieNameAccessToken)
 	if strings.TrimSpace(token) == "" {
 		h.redirectAuthorizeLogin(c, orgCtx.Org.ID, req, params)
 		return
