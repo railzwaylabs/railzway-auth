@@ -22,7 +22,7 @@ type Config struct {
 	DBSSLMode            string
 	AdminEmail           string
 	AdminPassword        string
-	DefaultOrgID         int64
+
 	RedisAddr            string
 	RedisPassword        string
 	RedisDB              int
@@ -49,15 +49,6 @@ func (c Config) DSN() string {
 func Load() (Config, error) {
 	_ = godotenv.Load()
 
-	defaultOrgRaw := strings.TrimSpace(os.Getenv("DEFAULT_ORG"))
-	if defaultOrgRaw == "" {
-		return Config{}, fmt.Errorf("DEFAULT_ORG is required")
-	}
-	defaultOrgID, err := strconv.ParseInt(defaultOrgRaw, 10, 64)
-	if err != nil {
-		return Config{}, fmt.Errorf("DEFAULT_ORG must be a valid int64")
-	}
-
 	cfg := Config{
 		Environment:          getEnv("APP_ENV", "development"),
 		HTTPPort:             getEnv("HTTP_PORT", "8080"),
@@ -67,9 +58,7 @@ func Load() (Config, error) {
 		DBUser:               getEnv("DB_USER", "postgres"),
 		DBPassword:           getEnv("DB_PASSWORD", ""),
 		DBSSLMode:            getEnv("DB_SSL_MODE", "disable"),
-		AdminEmail:           adminEmail,
-		AdminPassword:        adminPassword,
-		DefaultOrgID:         defaultOrgID,
+
 		RedisAddr:            getEnv("REDIS_ADDR", "127.0.0.1:6379"),
 		RedisPassword:        os.Getenv("REDIS_PASSWORD"),
 		RedisDB:              getInt("REDIS_DB", 0),
