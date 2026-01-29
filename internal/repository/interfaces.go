@@ -19,6 +19,7 @@ type OrgRepository interface {
 	GetPasswordConfig(ctx context.Context, orgID int64) (domain.PasswordConfig, error)
 	GetOTPConfig(ctx context.Context, orgID int64) (domain.OTPConfig, error)
 	ListOAuthIDPConfigs(ctx context.Context, orgID int64) ([]domain.OAuthIDPConfig, error)
+	Count(ctx context.Context) (int64, error)
 }
 
 // UserRepository exposes persistence for platform users.

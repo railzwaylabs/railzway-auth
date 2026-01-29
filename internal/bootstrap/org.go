@@ -25,25 +25,23 @@ func EnsureOrg(lc fx.Lifecycle, cfg config.Config, orgs repository.OrgRepository
 }
 
 func ensureOrg(ctx context.Context, cfg config.Config, orgs repository.OrgRepository, node *snowflake.Node, logger *zap.Logger) error {
-	if cfg.DefaultOrgID == 0 {
-		return fmt.Errorf("bootstrap org missing required config: DEFAULT_ORG")
+	// Check count
+	count, err := orgs.Count(ctx)
+	if err != nil {
+		return fmt.Errorf("bootstrap org count: %w", err)
 	}
 
-	// Check if org exists
-	exists, err := orgs.GetOrg(ctx, cfg.DefaultOrgID)
-	if err == nil {
-		logger.Info("bootstrap org already exists", zap.Int64("org_id", exists.ID), zap.String("slug", exists.Slug))
+	if count > 0 {
+		logger.Info("bootstrap org check: organizations exist, skipping default creation", zap.Int64("count", count))
 		return nil
 	}
-	if err != nil && err != pgx.ErrNoRows {
-		return fmt.Errorf("bootstrap org lookup: %w", err)
-	}
 
-	// Create org
+	// Create default org
+	orgID := node.Generate().Int64()
 	newOrg := domain.Org{
-		ID:        cfg.DefaultOrgID,
-		Name:      "Default Organization", // You might want this configurable, but for now hardcoded or derived is fine
-		Slug:      fmt.Sprintf("org-%d", cfg.DefaultOrgID),
+		ID:        orgID,
+		Name:      "Default Organization",
+		Slug:      fmt.Sprintf("org-%d", orgID),
 		Status:    "ACTIVE",
 		Type:      "organization",
 		CreatedAt: time.Now(),

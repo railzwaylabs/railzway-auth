@@ -51,6 +51,15 @@ func (r *PostgresOrgRepo) GetOrg(ctx context.Context, orgID int64) (domain.Org, 
 	return mapOrgRow(row), nil
 }
 
+func (r *PostgresOrgRepo) Count(ctx context.Context) (int64, error) {
+	var count int64
+	err := r.db.QueryRow(ctx, "SELECT COUNT(*) FROM tenants").Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("count orgs: %w", err)
+	}
+	return count, nil
+}
+
 func (r *PostgresOrgRepo) Create(ctx context.Context, org domain.Org) (domain.Org, error) {
 	const query = `
 INSERT INTO tenants (id, type, name, slug, external_id, status, created_at, updated_at)
