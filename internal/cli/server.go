@@ -57,6 +57,7 @@ func runServer() {
 			newCodeRepository,
 			newKeyRepository,
 			newOAuthClientRepository,
+			newOAuthAppRepository,
 			newOAuthProviderConfigRepository,
 			newRedisClient,
 			newOAuthStateStore,
@@ -178,6 +179,10 @@ func newKeyRepository(q *sqlc.Queries) repository.KeyRepository {
 
 func newOAuthClientRepository(pool *pgxpool.Pool) repository.OAuthClientRepository {
 	return repository.NewPostgresOAuthClientRepo(pool)
+}
+
+func newOAuthAppRepository(pool *pgxpool.Pool) repository.OAuthAppRepository {
+	return repository.NewPostgresOAuthAppRepo(pool)
 }
 
 func newOAuthProviderConfigRepository(q *sqlc.Queries) repository.OAuthProviderConfigRepo {
