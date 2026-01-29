@@ -49,6 +49,47 @@ job "railzway-auth" {
       }
     }
 
+    # Database Migration Task (runs before app starts)
+    task "migrate" {
+      lifecycle {
+        hook = "prestart"
+        sidecar = false
+      }
+
+      driver = "docker"
+
+      config {
+        image = "ghcr.io/railzwaylabs/railzway-auth:${var.version}"
+        args    = ["migrate", "up"]
+
+        # Docker registry authentication
+        auth {
+          username = "railzwaylabs"
+          password = var.github_token
+        }
+      }
+
+      # Environment variables (DB credentials needed for migration)
+      template {
+        data = <<EOH
+# Database
+DB_HOST={{ key "railzway-auth/db_host" }}
+DB_PORT={{ key "railzway-auth/db_port" }}
+DB_NAME={{ key "railzway-auth/db_name" }}
+DB_USER={{ key "railzway-auth/db_user" }}
+DB_PASSWORD={{ key "railzway-auth/db_password" }}
+DB_SSL_MODE={{ key "railzway-auth/db_ssl_mode" }}
+EOH
+        destination = "secrets/file.env"
+        env         = true
+      }
+
+      resources {
+        cpu    = 200
+        memory = 128
+      }
+    }
+
     # Application Server Task (handles migrations automatically on startup)
     task "server" {
       driver = "docker"
