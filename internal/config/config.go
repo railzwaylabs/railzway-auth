@@ -67,8 +67,6 @@ func Load() (Config, error) {
 		DBUser:               getEnv("DB_USER", "postgres"),
 		DBPassword:           getEnv("DB_PASSWORD", ""),
 		DBSSLMode:            getEnv("DB_SSL_MODE", "disable"),
-		AdminEmail:           adminEmail,
-		AdminPassword:        adminPassword,
 		DefaultOrgID:         defaultOrgID,
 		RedisAddr:            getEnv("REDIS_ADDR", "127.0.0.1:6379"),
 		RedisPassword:        os.Getenv("REDIS_PASSWORD"),
