@@ -462,19 +462,19 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO tenants (id, type, name, code, slug, country_code, timezone, is_default, status)
 VALUES
-    (1000, 'platform', 'Railzway Cloud', 'SB', 'railzway', 'SG', 'Asia/Singapore', TRUE, 'active'),
+    (1000, 'platform', 'Railzway Cloud', 'SB', 'railzway', 'SG', 'Asia/Singapore', TRUE, 'active')
 ON CONFLICT DO NOTHING;
 
 -- Branding defaults
 INSERT INTO brandings (tenant_id, primary_color, secondary_color, accent_color, background_color, text_color, dark_mode)
 VALUES
-    (1000, '#5B3CF6', '#7E65FA', '#4A2ED9', '#111113', '#FFFFFF', TRUE),
+    (1000, '#5B3CF6', '#7E65FA', '#4A2ED9', '#111113', '#FFFFFF', TRUE)
 ON CONFLICT DO NOTHING;
 
 -- Primary domains
 INSERT INTO domains (id, tenant_id, host, is_primary, verified)
 VALUES
-    (1001, 1000, 'accounts.railzway.com', TRUE, TRUE),
+    (1001, 1000, 'accounts.railzway.com', TRUE, TRUE)
 ON CONFLICT DO NOTHING;
 
 -- OAuth apps & clients (Postman-friendly defaults)
@@ -496,12 +496,12 @@ VALUES
         ARRAY['openid', 'profile', 'email', 'offline_access'],
         ARRAY['client_secret_basic'],
         FALSE
-    ),
+    )
 ON CONFLICT DO NOTHING;
 
 INSERT INTO oauth_keys (id, tenant_id, kid, algorithm, secret, is_active)
 VALUES
-    (1300, 1000, 'sb-key-1', 'HS256', encode(gen_random_bytes(32), 'hex'), TRUE),
+    (1300, 1000, 'sb-key-1', 'HS256', encode(gen_random_bytes(32), 'hex'), TRUE)
 ON CONFLICT DO NOTHING;
 
 INSERT INTO oauth_idp_configs (
@@ -530,24 +530,24 @@ VALUES
         'http://localhost:9000/oauth2/userinfo',
         'http://localhost:9000/oauth2/jwks',
         ARRAY['openid','email','profile']
-    ),
+    )
 ON CONFLICT DO NOTHING;
 
 -- Default auth providers
 INSERT INTO tenant_auth_providers (id, tenant_id, provider_type, is_active)
 VALUES
     (5001, 1000, 'password', TRUE),
-    (5002, 1000, 'otp', TRUE),
+    (5002, 1000, 'otp', TRUE)
 ON CONFLICT DO NOTHING;
 
 INSERT INTO password_configs (tenant_id, min_length, require_uppercase, require_number, require_symbol)
 VALUES
-    (1000, 8, FALSE, TRUE, FALSE),
+    (1000, 8, FALSE, TRUE, FALSE)
 ON CONFLICT DO NOTHING;
 
 INSERT INTO otp_configs (tenant_id, channel, provider, api_key, sender, template, expiry_seconds)
 VALUES
-    (1000, 'sms', 'debug', 'local-dev', 'Railzway', 'Your OTP is {{code}}', 300),
+    (1000, 'sms', 'debug', 'local-dev', 'Railzway', 'Your OTP is {{code}}', 300)
 ON CONFLICT DO NOTHING;
 
 ALTER TABLE tenants ADD COLUMN external_id VARCHAR(255);
