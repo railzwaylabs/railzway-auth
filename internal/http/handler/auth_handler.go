@@ -16,6 +16,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
+	"github.com/smallbiznis/railzway-auth/internal/config"
 	domainoauth "github.com/smallbiznis/railzway-auth/internal/domain/oauth"
 	"github.com/smallbiznis/railzway-auth/internal/http/middleware"
 	"github.com/smallbiznis/railzway-auth/internal/org"
@@ -30,6 +31,7 @@ type AuthHandler struct {
 	OAuth               authsvc.OAuthService
 	Discovery           *service.DiscoveryService
 	AuthorizeStateStore repository.AuthorizeStateStore
+	Config              config.Config
 }
 
 const (
@@ -38,8 +40,9 @@ const (
 )
 
 // NewAuthHandler creates the handler set.
-func NewAuthHandler(auth *service.AuthService, oauth authsvc.OAuthService, discovery *service.DiscoveryService, authorizeStateStore repository.AuthorizeStateStore) *AuthHandler {
+func NewAuthHandler(cfg config.Config, auth *service.AuthService, oauth authsvc.OAuthService, discovery *service.DiscoveryService, authorizeStateStore repository.AuthorizeStateStore) *AuthHandler {
 	return &AuthHandler{
+		Config:              cfg,
 		Auth:                auth,
 		OAuth:               oauth,
 		Discovery:           discovery,
@@ -228,16 +231,8 @@ func (h *AuthHandler) OAuthCallback(c *gin.Context) {
 		return
 	}
 
-	expiry := time.Now().Add(time.Duration(session.ExpiresIn) * time.Second)
-	http.SetCookie(c.Writer, &http.Cookie{
-		Name:     "sbn_session",
-		Value:    session.AccessToken,
-		Path:     "/",
-		Expires:  expiry,
-		HttpOnly: true,
-		Secure:   c.Request.TLS != nil,
-		SameSite: http.SameSiteLaxMode,
-	})
+	h.setCookie(c, "_access_token", session.AccessToken, int(session.ExpiresIn))
+	h.setCookie(c, "_refresh_token", session.RefreshToken, int(session.ExpiresIn))
 
 	redirect := strings.TrimSpace(c.Query("redirect_uri"))
 	if redirect == "" {

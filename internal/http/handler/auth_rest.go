@@ -69,8 +69,8 @@ func (h *AuthHandler) PasswordLogin(c *gin.Context) {
 	}
 
 	maxAge := 3600
-	setCookie(c, "sb_access_token", resp.AccessToken, maxAge, "/", ".railzway.test", false, true)
-	setCookie(c, "sb_refresh_token", resp.RefreshToken, maxAge, "/", ".railzway.test", false, true)
+	h.setCookie(c, "_access_token", resp.AccessToken, maxAge)
+	h.setCookie(c, "_refresh_token", resp.RefreshToken, maxAge)
 
 	authorizeURL := ""
 	if authorizeState != nil {
@@ -133,8 +133,8 @@ func (h *AuthHandler) PasswordRegister(c *gin.Context) {
 	}
 
 	maxAge := 3600
-	setCookie(c, "sb_access_token", resp.AccessToken, maxAge, "/", ".smallbiznisapp.io", false, true)
-	setCookie(c, "sb_refresh_token", resp.RefreshToken, maxAge, "/", ".smallbiznisapp.io", false, true)
+	h.setCookie(c, "sb_access_token", resp.AccessToken, maxAge)
+	h.setCookie(c, "sb_refresh_token", resp.RefreshToken, maxAge)
 
 	authorizeURL := ""
 	if authorizeState != nil {
@@ -274,15 +274,16 @@ func respondOAuthError(c *gin.Context, err error) {
 	c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error", "error_description": err.Error()})
 }
 
-func setCookie(c *gin.Context, name, value string, maxAge int, path, domain string, secure, httpOnly bool) {
+func (h *AuthHandler) setCookie(c *gin.Context, name, value string, maxAge int) {
+	c.SetSameSite(http.SameSiteLaxMode)
 	c.SetCookie(
-		name,     // name
-		value,    // value
-		maxAge,   // maxAge (1 jam)
-		path,     // path
-		domain,   // domain → penting!!
-		secure,   // secure → harus true kalau HTTPS
-		httpOnly, // httpOnly → jangan bisa diakses JS
+		name,                      // name
+		value,                     // value
+		maxAge,                    // maxAge
+		"/",                       // path
+		c.Request.Host,            // domain
+		h.Config.AuthCookieSecure, // secure
+		true,                      // httpOnly
 	)
 }
 

@@ -12,16 +12,16 @@ import (
 
 // Config contains runtime configuration values.
 type Config struct {
-	Environment          string
-	HTTPPort             string
-	DBHost               string
-	DBPort               string
-	DBName               string
-	DBUser               string
-	DBPassword           string
-	DBSSLMode            string
-	AdminEmail           string
-	AdminPassword        string
+	Environment   string
+	HTTPPort      string
+	DBHost        string
+	DBPort        string
+	DBName        string
+	DBUser        string
+	DBPassword    string
+	DBSSLMode     string
+	AdminEmail    string
+	AdminPassword string
 
 	RedisAddr            string
 	RedisPassword        string
@@ -37,6 +37,8 @@ type Config struct {
 	CORSAllowedMethods   []string
 	CORSAllowedHeaders   []string
 	CORSAllowCredentials bool
+
+	AuthCookieSecure bool
 }
 
 // DSN returns the database connection string.
@@ -50,14 +52,14 @@ func Load() (Config, error) {
 	_ = godotenv.Load()
 
 	cfg := Config{
-		Environment:          getEnv("APP_ENV", "development"),
-		HTTPPort:             getEnv("HTTP_PORT", "8080"),
-		DBHost:               getEnv("DB_HOST", "localhost"),
-		DBPort:               getEnv("DB_PORT", "5432"),
-		DBName:               getEnv("DB_NAME", "postgres"),
-		DBUser:               getEnv("DB_USER", "postgres"),
-		DBPassword:           getEnv("DB_PASSWORD", ""),
-		DBSSLMode:            getEnv("DB_SSL_MODE", "disable"),
+		Environment: getEnv("APP_ENV", "development"),
+		HTTPPort:    getEnv("HTTP_PORT", "8080"),
+		DBHost:      getEnv("DB_HOST", "localhost"),
+		DBPort:      getEnv("DB_PORT", "5432"),
+		DBName:      getEnv("DB_NAME", "postgres"),
+		DBUser:      getEnv("DB_USER", "postgres"),
+		DBPassword:  getEnv("DB_PASSWORD", ""),
+		DBSSLMode:   getEnv("DB_SSL_MODE", "disable"),
 
 		RedisAddr:            getEnv("REDIS_ADDR", "127.0.0.1:6379"),
 		RedisPassword:        os.Getenv("REDIS_PASSWORD"),
@@ -73,6 +75,13 @@ func Load() (Config, error) {
 		CORSAllowedMethods:   getList("CORS_ALLOWED_METHODS", []string{"GET", "POST", "OPTIONS"}),
 		CORSAllowedHeaders:   getList("CORS_ALLOWED_HEADERS", []string{"Authorization", "Content-Type"}),
 		CORSAllowCredentials: getBool("CORS_ALLOW_CREDENTIALS", false),
+		AuthCookieSecure:     getBool("AUTH_COOKIE_SECURE", false),
+	}
+
+	// Default AuthCookieSecure to true in production if not explicitly set (handled by getBool default above, but let's enforce safe default logic if needed)
+	// Actually, getBool takes a default. Let's start with false as default, but if env is production, we might want to default to true.
+	if cfg.Environment == "production" {
+		cfg.AuthCookieSecure = true
 	}
 
 	if cfg.RefreshTokenBytes < 32 {
