@@ -353,7 +353,7 @@ func (h *AuthHandler) OAuthAuthorize(c *gin.Context) {
 	}
 
 	// Only session cookie authentication is allowed for /oauth/authorize
-	token, _ := c.Cookie("sb_access_token")
+	token, _ := c.Cookie("_access_token")
 	if strings.TrimSpace(token) == "" {
 		h.redirectAuthorizeLogin(c, orgCtx.Org.ID, req, params)
 		return
