@@ -69,8 +69,8 @@ func (h *AuthHandler) PasswordLogin(c *gin.Context) {
 	}
 
 	maxAge := 3600
-	h.setCookie(c, "_access_token", resp.AccessToken, maxAge)
-	h.setCookie(c, "_refresh_token", resp.RefreshToken, maxAge)
+	h.setCookie(c, CookieNameAccessToken, resp.AccessToken, maxAge)
+	h.setCookie(c, CookieNameRefreshToken, resp.RefreshToken, maxAge)
 
 	authorizeURL := ""
 	if authorizeState != nil {
@@ -133,8 +133,8 @@ func (h *AuthHandler) PasswordRegister(c *gin.Context) {
 	}
 
 	maxAge := 3600
-	h.setCookie(c, "sb_access_token", resp.AccessToken, maxAge)
-	h.setCookie(c, "sb_refresh_token", resp.RefreshToken, maxAge)
+	h.setCookie(c, CookieNameAccessToken, resp.AccessToken, maxAge)
+	h.setCookie(c, CookieNameRefreshToken, resp.RefreshToken, maxAge)
 
 	authorizeURL := ""
 	if authorizeState != nil {
