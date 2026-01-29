@@ -49,14 +49,6 @@ func (c Config) DSN() string {
 func Load() (Config, error) {
 	_ = godotenv.Load()
 
-	adminEmail := strings.TrimSpace(os.Getenv("ADMIN_EMAIL"))
-	if adminEmail == "" {
-		return Config{}, fmt.Errorf("ADMIN_EMAIL is required")
-	}
-	adminPassword := strings.TrimSpace(os.Getenv("ADMIN_PASSWORD"))
-	if adminPassword == "" {
-		return Config{}, fmt.Errorf("ADMIN_PASSWORD is required")
-	}
 	defaultOrgRaw := strings.TrimSpace(os.Getenv("DEFAULT_ORG"))
 	if defaultOrgRaw == "" {
 		return Config{}, fmt.Errorf("DEFAULT_ORG is required")
