@@ -73,6 +73,7 @@ func NewRouter(cfg config.Config, authHandler *handler.AuthHandler, adminHandler
 	oauth := r.Group("/oauth")
 	{
 		oauth.POST("/token", authHandler.Token)
+		oauth.GET("/authorize", authHandler.OAuthAuthorize)
 		oauth.POST("/introspect", authHandler.OAuthIntrospect)
 		oauth.POST("/revoke", authHandler.OAuthRevoke)
 		oauth.GET("/userinfo", authHandler.OAuthUserInfo)
