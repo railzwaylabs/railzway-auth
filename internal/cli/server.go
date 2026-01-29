@@ -143,12 +143,14 @@ func newPGXPool(lc fx.Lifecycle, cfg config.Config) (*pgxpool.Pool, error) {
 		return nil, fmt.Errorf("ping database: %w", err)
 	}
 
-	lc.Append(fx.Hook{
-		OnStop: func(context.Context) error {
-			pool.Close()
-			return nil
-		},
-	})
+	if lc != nil {
+		lc.Append(fx.Hook{
+			OnStop: func(context.Context) error {
+				pool.Close()
+				return nil
+			},
+		})
+	}
 
 	return pool, nil
 }
