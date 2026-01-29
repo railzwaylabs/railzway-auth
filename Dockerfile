@@ -39,6 +39,7 @@ FROM gcr.io/distroless/static-debian12 AS runtime
 
 COPY --from=builder /workspace/auth /usr/local/bin/auth
 COPY --from=frontend-builder /app/ui/dist /ui/dist
+COPY sql/migrations /migrations
 
 EXPOSE 8080
 USER 65532:65532
